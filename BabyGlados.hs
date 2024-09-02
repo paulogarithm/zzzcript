@@ -12,13 +12,6 @@ data Symbol = While | If | Else |
     Id String | Number Float | Boolean Bool
     deriving(Show)
 
-data Token = TAdd | TSub | TLt | TGt | TIf1 | TIf2 | TWhile |
-    TEmpty | TSeq | TExpr | TProg | TSet |
-    TVar String | TConst Float
-    deriving(Show)
-
-data Node = NullNode | Node (Token,(Node,Node,Node)) deriving(Show)
-
 -- Lexing
 
 symbolList :: [(String,Symbol)]
@@ -70,6 +63,15 @@ getAllSyms (x:xs) list = case (getSymChar x) of
             Nothing -> Nothing
 
 -- Parsing
+
+data Token = TAdd | TSub | TLt | TGt | TIf1 | TIf2 | TWhile |
+    TEmpty | TSeq | TExpr | TProg | TSet |
+    TVar String | TConst Float
+    deriving(Show)
+
+data Node = NullNode | Node (Token,(Node,Node,Node)) deriving(Show)
+
+type AST = Node
 
 type ParsingRes = Maybe (Node,[Symbol])
 
@@ -129,17 +131,36 @@ parseExpr l@((Id i):xs) = case (parseTest l) of
     x -> x
 parseExpr l = parseTest l
 
-parseParen :: [Symbol] -> Maybe (Node, [Symbol])
+parseParen :: [Symbol] -> ParsingRes
 parseParen (LPar:xs) = case (parseExpr xs) of
     Just (n,(RPar:rest)) -> Just (n, rest)
     _ -> Nothing
 parseParen _ = Nothing
 
-parsing :: String -> ParsingRes
+parseStatement :: [Symbol] -> ParsingRes
+parseStatement (If:xs) = case (parseParen xs) of
+    Nothing -> Nothing
+    Just (a,ys) -> case (parseStatement ys) of
+        Nothing -> Nothing
+        Just (b,(Else:zs)) -> case (parseStatement zs) of
+            Nothing -> Nothing
+            Just (c,ns) -> Just (Node(TIf2,(a,b,c)),ns)
+        Just (b,zs) -> Just (Node(TIf1,(a,b,NullNode)),zs)
+parseStatement l = case (parseExpr l) of
+    Just (a,(Semi:[])) -> Just(Node(TExpr,(a,NullNode,NullNode)),[])
+    Just (a,(Semi:xs)) -> case (parseStatement xs) of
+        Nothing -> Nothing
+        Just (b,xs) -> Just(Node(TExpr,(a,b,NullNode)),xs)
+    _ -> Nothing
+
+parsing :: String -> Maybe AST
 parsing s = case (getAllSyms s []) of
-    Just syms -> parseExpr syms
+    Just syms -> case (parseStatement syms) of
+        Just (n,_) -> Just n
+        Nothing -> Nothing
     Nothing -> Nothing
 
+-- Main
 
 main :: IO()
 main = putStrLn "hello"
