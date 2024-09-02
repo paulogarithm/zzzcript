@@ -84,7 +84,7 @@ parseTerm [] = Nothing
 parseTerm (x:xs) = case (x) of
     Id s -> giveResult (TVar s) xs
     Number c -> giveResult (TConst c) xs
-    _ -> Nothing
+    _ -> parseParen (x:xs)
 
 _parseSumloop :: [Symbol] -> Node -> ParsingRes
 _parseSumloop (Plus:xs) n = case (parseTerm xs) of
@@ -129,15 +129,17 @@ parseExpr l@((Id i):xs) = case (parseTest l) of
     x -> x
 parseExpr l = parseTest l
 
+parseParen :: [Symbol] -> Maybe (Node, [Symbol])
+parseParen (LPar:xs) = case (parseExpr xs) of
+    Just (n,(RPar:rest)) -> Just (n, rest)
+    _ -> Nothing
+parseParen _ = Nothing
+
 parsing :: String -> ParsingRes
 parsing s = case (getAllSyms s []) of
     Just syms -> parseExpr syms
     Nothing -> Nothing
 
--- parseParen :: [Symbol] -> Maybe (Node, [Symbol])
--- parseParen [] = Nothing
--- parseParen (LPar:xs) = 
--- parseParen _ = Nothing
 
 main :: IO()
 main = putStrLn "hello"
