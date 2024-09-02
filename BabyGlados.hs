@@ -10,10 +10,12 @@ data Symbol = While | If | Else |
     Id String | Number Float | Boolean Bool
     deriving(Show)
 
-data Node = Node {  id :: String,
-                    num :: Float,
-                    children :: (Node, Node, Node)
-                 } deriving(Show)
+data Token = TAdd | TSub | TLt | TGt | TIf1 | TIf2 | TWhile |
+    TEmpty | TSeq | TExpr | TProg |
+    TVar String | TConst Float
+    deriving(Show)
+
+data Node = NullNode | Node (Token,(Node,Node,Node)) deriving(Show)
 
 -- Lexing
 
@@ -54,6 +56,18 @@ loopAction (x:xs) list = case (getSymChar x) of
     Nothing -> case (getSymStr (x:xs)) of
         Just (ssym,rest) -> loopAction rest (list++[ssym])
         Nothing -> Nothing
+
+-- Parsing
+
+newNode :: Token -> Node
+newNode t = Node (t,(NullNode,NullNode,NullNode))
+
+parseTerm :: [Symbol] -> Maybe (Node,[Symbol])
+parseTerm [] -> Nothing
+parseTerm (x:xs) = case (x) of
+    Id s -> Just (newNode (Var s),xs)
+    Const c -> Just (newNode (Const c),xs)
+    _ -> Nothing
 
 main :: IO()
 main = putStrLn "hello"
