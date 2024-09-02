@@ -41,26 +41,26 @@ getSymStr str = case (find (\(x,_) -> isPrefixOf x str) symbolList) of
     Just (symstr,sym) -> Just (sym, drop (length symstr) str)
     Nothing -> Nothing
 
-getSymUser :: String -> Maybe (Symbol,String)
+getSymUser :: String -> Either String (Symbol,String)
 getSymUser s = case (reads s :: [(Float, String)]) of
-    [(n,rest)] -> Just (Number n,rest)
+    [(n,rest)] -> Right (Number n,rest)
     _ -> case (span isAlphaNum s) of
         (var, rest)
-            | not (null var) && isAlphaNum (head var) -> Just (Id var,rest)
-            | otherwise -> Nothing
+            | not (null var) && isAlphaNum (head var) -> Right (Id var,rest)
+            | otherwise -> Left ("parsing: invalid word: " ++ rest)
 
-getAllSyms :: String -> [Symbol] -> Maybe [Symbol]
-getAllSyms [] list = Just list
+getAllSyms :: String -> [Symbol] -> Either String [Symbol]
+getAllSyms [] list = Right list
 getAllSyms (' ':xs) list = getAllSyms xs list
 getAllSyms ('\n':xs) list = getAllSyms xs list
 getAllSyms (x:xs) list = case (getSymChar x) of
-    Just (Eof) -> Just list
+    Just (Eof) -> Right list
     Just sym -> getAllSyms xs (list++[sym])
     Nothing -> case (getSymStr (x:xs)) of
         Just (sym,rest) -> getAllSyms rest (list++[sym])
         Nothing -> case (getSymUser (x:xs)) of
-            Just (sym,rest) -> getAllSyms rest (list++[sym])
-            Nothing -> Nothing
+            Right (sym,rest) -> getAllSyms rest (list++[sym])
+            Left err -> Left err
 
 -- Parsing
 
@@ -153,12 +153,12 @@ parseStatement l = case (parseExpr l) of
         Just (b,xs) -> Just(Node(TExpr,(a,b,NullNode)),xs)
     _ -> Nothing
 
-parsing :: String -> Maybe AST
+parsing :: String -> Either String AST
 parsing s = case (getAllSyms s []) of
-    Just syms -> case (parseStatement syms) of
-        Just (n,_) -> Just n
-        Nothing -> Nothing
-    Nothing -> Nothing
+    Right syms -> case (parseStatement syms) of
+        Just (n,_) -> Right n
+        Nothing -> Left "error"
+    Left err -> Left err
 
 -- Main
 
