@@ -13,7 +13,7 @@ data Symbol = While | If | Else |
     deriving(Show)
 
 data Token = TAdd | TSub | TLt | TGt | TIf1 | TIf2 | TWhile |
-    TEmpty | TSeq | TExpr | TProg |
+    TEmpty | TSeq | TExpr | TProg | TSet |
     TVar String | TConst Float
     deriving(Show)
 
@@ -103,9 +103,35 @@ parseSum l = case (parseTerm l) of
         Nothing -> Nothing
         x -> x
 
+_parseTestloop :: [Symbol] -> Node -> ParsingRes
+_parseTestloop (Minus:xs) n = case (parseSum xs) of
+    Just (newn, xxs) -> _parseTestloop xxs (Node (TLt, (n, newn, NullNode)))
+    Nothing -> Nothing
+_parseTestloop (Great:xs) n = case (parseSum xs) of
+    Just (newn, xxs) -> _parseTestloop xxs (Node (TGt, (n, newn, NullNode)))
+    Nothing -> Nothing
+_parseTestloop l n = Just (n, l)
+
+parseTest :: [Symbol] -> ParsingRes
+parseTest [] = Nothing
+parseTest l = case (parseSum l) of
+    Nothing -> Nothing
+    Just (n,xs) -> case (_parseTestloop xs n) of
+        Nothing -> Nothing
+        x -> x
+
+parseExpr :: [Symbol] -> ParsingRes
+parseExpr l@((Id i):xs) = case (parseTest l) of
+    Nothing -> Nothing
+    Just (n@(Node(TVar i,_)),(Equal:xxs)) -> case (parseExpr xxs) of
+        Nothing -> Nothing
+        Just (nn,rest) -> Just (Node(TSet, (n, nn, NullNode)), rest)
+    x -> x
+parseExpr l = parseTest l
+
 parsing :: String -> ParsingRes
 parsing s = case (getAllSyms s []) of
-    Just syms -> parseSum syms
+    Just syms -> parseExpr syms
     Nothing -> Nothing
 
 -- parseParen :: [Symbol] -> Maybe (Node, [Symbol])
