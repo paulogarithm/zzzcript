@@ -73,16 +73,16 @@ data Node = NullNode | Node (Token,(Node,Node,Node)) deriving(Show)
 
 type AST = Node
 
-type ParsingRes = Maybe (Node,[Symbol])
+type ParsingRes = Either String (Node,[Symbol])
 
 newNode :: Token -> Node
 newNode t = Node (t, (NullNode, NullNode, NullNode))
 
 giveResult :: Token -> [Symbol] -> ParsingRes
-giveResult t l = Just (newNode t, l)
+giveResult t l = Right (newNode t, l)
 
 parseTerm :: [Symbol] -> ParsingRes
-parseTerm [] = Nothing
+parseTerm [] = Left "expected anything, but nothing was found."
 parseTerm (x:xs) = case (x) of
     Id s -> giveResult (TVar s) xs
     Number c -> giveResult (TConst c) xs
@@ -90,75 +90,122 @@ parseTerm (x:xs) = case (x) of
 
 _parseSumloop :: [Symbol] -> Node -> ParsingRes
 _parseSumloop (Plus:xs) n = case (parseTerm xs) of
-    Just (newn, xxs) -> _parseSumloop xxs (Node (TAdd, (n, newn, NullNode)))
-    Nothing -> Nothing
+    Right (newn, xxs) -> _parseSumloop xxs (Node (TAdd, (n, newn, NullNode)))
+    Left err -> Left ("in sum (+), " ++ err)
 _parseSumloop (Minus:xs) n = case (parseTerm xs) of
-    Just (newn, xxs) -> _parseSumloop xxs (Node (TSub, (n, newn, NullNode)))
-    Nothing -> Nothing
-_parseSumloop l n = Just (n, l)
+    Right (newn, xxs) -> _parseSumloop xxs (Node (TSub, (n, newn, NullNode)))
+    Left err -> Left ("in sum (-), " ++ err)
+_parseSumloop l n = Right (n, l)
 
 parseSum :: [Symbol] -> ParsingRes
-parseSum [] = Nothing
 parseSum l = case (parseTerm l) of
-    Nothing -> Nothing
-    Just (n,xs) -> case (_parseSumloop xs n) of
-        Nothing -> Nothing
-        x -> x
+    Left err -> Left ("in sum, " ++ err)
+    Right (n,xs) -> case (_parseSumloop xs n) of
+        Left err -> Left err
+        Right x -> Right x
 
 _parseTestloop :: [Symbol] -> Node -> ParsingRes
-_parseTestloop (Minus:xs) n = case (parseSum xs) of
-    Just (newn, xxs) -> _parseTestloop xxs (Node (TLt, (n, newn, NullNode)))
-    Nothing -> Nothing
-_parseTestloop (Great:xs) n = case (parseSum xs) of
-    Just (newn, xxs) -> _parseTestloop xxs (Node (TGt, (n, newn, NullNode)))
-    Nothing -> Nothing
-_parseTestloop l n = Just (n, l)
+_parseTestloop (Less:xs) n = case (parseTerm xs) of
+    Right (newn, xxs) -> _parseTestloop xxs (Node (TLt, (n, newn, NullNode)))
+    Left err -> Left ("in test (<), " ++ err)
+_parseTestloop (Great:xs) n = case (parseTerm xs) of
+    Right (newn, xxs) -> _parseTestloop xxs (Node (TGt, (n, newn, NullNode)))
+    Left err -> Left ("in test (>), " ++ err)
+_parseTestloop l n = Right (n, l)
 
 parseTest :: [Symbol] -> ParsingRes
-parseTest [] = Nothing
-parseTest l = case (parseSum l) of
-    Nothing -> Nothing
-    Just (n,xs) -> case (_parseTestloop xs n) of
-        Nothing -> Nothing
-        x -> x
+parseTest l = case (parseTerm l) of
+    Left err -> Left ("in test, " ++ err)
+    Right (n,xs) -> case (_parseTestloop xs n) of
+        Left err -> Left err
+        Right x -> Right x
 
 parseExpr :: [Symbol] -> ParsingRes
 parseExpr l@((Id i):xs) = case (parseTest l) of
-    Nothing -> Nothing
-    Just (n@(Node(TVar i,_)),(Equal:xxs)) -> case (parseExpr xxs) of
-        Nothing -> Nothing
-        Just (nn,rest) -> Just (Node(TSet, (n, nn, NullNode)), rest)
-    x -> x
+    Left err -> Left ("in expression, " ++ err)
+    Right (n@(Node(TVar i,_)),(Equal:xxs)) -> case (parseExpr xxs) of
+        Left err -> Left err
+        Right (nn,rest) -> Right (Node(TSet, (n, nn, NullNode)), rest)
+    Right x -> Right x
 parseExpr l = parseTest l
 
 parseParen :: [Symbol] -> ParsingRes
 parseParen (LPar:xs) = case (parseExpr xs) of
-    Just (n,(RPar:rest)) -> Just (n, rest)
-    _ -> Nothing
-parseParen _ = Nothing
+    Right (n,(RPar:rest)) -> Right (n, rest)
+    Right (n,[]) -> Left "expected RPar, got nothing."
+    Right (n,(x:xs)) -> Left ("expected RPar, got " ++ (show x) ++ ".")
+    Left err -> Left ("in parenthesis, " ++ err)
+parseParen (x:xs) = Left ("expected left parenthesis, got " ++ (show x) ++ ".")
+parseParen [] = Left "expected left parenthesis, got nothing."
+
+_parseBrackets :: [Symbol] -> Node -> ParsingRes
+_parseBrackets (RBra:xs) n = Right (n,xs)
+_parseBrackets [] _ = Left "expect right bracket."
+_parseBrackets l n = case (parseStatement l) of
+    Left err -> Left ("in brackets, " ++ err)
+    Right (a, rest) -> _parseBrackets rest (Node(TSeq, (n, a, NullNode)))
 
 parseStatement :: [Symbol] -> ParsingRes
 parseStatement (If:xs) = case (parseParen xs) of
-    Nothing -> Nothing
-    Just (a,ys) -> case (parseStatement ys) of
-        Nothing -> Nothing
-        Just (b,(Else:zs)) -> case (parseStatement zs) of
-            Nothing -> Nothing
-            Just (c,ns) -> Just (Node(TIf2,(a,b,c)),ns)
-        Just (b,zs) -> Just (Node(TIf1,(a,b,NullNode)),zs)
+    Left err -> Left ("in the if condition, " ++ err)
+    Right (a,ys) -> case (parseStatement ys) of
+        Left err -> Left ("in the if statement, " ++ err)
+        Right (b,(Else:zs)) -> case (parseStatement zs) of
+            Left err -> Left ("in the else statement, " ++ err)
+            Right (c,ns) -> Right (Node(TIf2,(a,b,c)),ns)
+        Right (b,zs) -> Right (Node(TIf1,(a,b,NullNode)),zs)
+parseStatement (While:xs) = case (parseParen xs) of
+    Left err -> Left ("in the while condition, " ++ err)
+    Right (a,ys) -> case (parseStatement ys) of
+        Left err -> Left ("in the while statement, " ++ err)
+        Right (b,zs) -> Right (Node(TWhile,(a,b,NullNode)),zs)
+parseStatement (LBra:xs) = _parseBrackets xs (newNode TEmpty)
 parseStatement l = case (parseExpr l) of
-    Just (a,(Semi:[])) -> Just(Node(TExpr,(a,NullNode,NullNode)),[])
-    Just (a,(Semi:xs)) -> case (parseStatement xs) of
-        Nothing -> Nothing
-        Just (b,xs) -> Just(Node(TExpr,(a,b,NullNode)),xs)
-    _ -> Nothing
+    Right (a,(Semi:xs)) -> Right (Node(TExpr,(a,NullNode,NullNode)),xs)
+    Right (a,rest) -> Left "expected semicolon."
+    Left err -> Left ("in statement, " ++ err)
 
 parsing :: String -> Either String AST
 parsing s = case (getAllSyms s []) of
     Right syms -> case (parseStatement syms) of
-        Just (n,_) -> Right n
-        Nothing -> Left "error"
+        Right (n,_) -> Right n
+        Left err -> Left err
     Left err -> Left err
+
+-- ce qui arrive quand je fais 'while (a < 20) { a = 10; b = 20; }'
+foo = Right (Node (TWhile,(
+    Node (TLt,(
+        Node (TVar "a",(NullNode,NullNode,NullNode)),
+        Node (TConst 20.0,(NullNode,NullNode,NullNode)),
+        NullNode)
+    ),
+    Node (TSeq,(
+        Node (TSeq,(
+            Node (TEmpty,(NullNode,NullNode,NullNode)),
+            Node (TExpr,(
+                Node (TSet,(
+                    Node (TVar "a",(NullNode,NullNode,NullNode)),
+                    Node (TConst 10.0,(NullNode,NullNode,NullNode)),
+                    NullNode)
+                ),
+                NullNode,
+                NullNode)
+            ),
+            NullNode)
+        ),
+        Node (TExpr,(
+            Node (TSet,(
+                Node (TVar "b",(NullNode,NullNode,NullNode)),
+                Node (TConst 20.0,(NullNode,NullNode,NullNode)),
+                NullNode)
+            ),
+            NullNode,
+            NullNode)
+        ),
+        NullNode)
+    ),
+    NullNode)
+))
 
 -- Main
 
