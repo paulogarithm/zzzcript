@@ -2,6 +2,7 @@ import Text.Read(reads)
 import Data.Char(isAlphaNum)
 import Data.List(find)
 import System.IO(isEOF, hFlush, stdout)
+import System.Exit(exitWith, ExitCode( ExitSuccess, ExitFailure))
 
 -- lexer
 
@@ -136,7 +137,7 @@ tokenToValue (TokNum n) env = Right (ValNum n)
 tokenToValue (TokBool n) env = Right (ValBool n)
 tokenToValue (TokDef d) env = case (envRawGet d env) of
     Just x -> Right x
-    _ -> Left "tokenToValue: define not found."
+    _ -> Left ("tokenToValue: you didnt defined '" ++ d ++ "'.")
 tokenToValue _ _ = Left "tokenToValue: couldn't convert token."
 
 evalThisTree :: Node -> Env -> Either String (Value, Env)
@@ -155,16 +156,16 @@ evalThisPlease env s = case (parseThisPlease s) of
 
 -- main code
 
-infiniteLoop :: Env -> IO String
+infiniteLoop :: Env -> IO()
 infiniteLoop env = putStr "\x1b[35;1mλ\x1b[m > "
     >> hFlush stdout >> isEOF >>= (\x -> case x of
-        True -> return "code is ok"
+        True -> exitWith ExitSuccess
         False -> getLine >>= (\s -> case (evalThisPlease env s) of
-                Left err -> return ("code failed because " ++ err)
+                Left err -> putStrLn ("code failed because " ++ err)
+                    >> exitWith (ExitFailure 84)
                 Right (ValNone, nenv) -> infiniteLoop nenv
                 Right (val, nenv) -> print val >> infiniteLoop nenv
-            )
-        )
+            ) )
 
 main :: IO()
-main = infiniteLoop defaultEnv >>= putStrLn
+main = infiniteLoop defaultEnv
