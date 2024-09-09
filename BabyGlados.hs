@@ -1,213 +1,170 @@
--- Baby Glados
-
-import System.Environment
-import System.Exit
-import Data.List
-import Data.Char
 import Text.Read(reads)
+import Data.Char(isAlphaNum)
+import Data.List(find)
+import System.IO(isEOF, hFlush, stdout)
 
-data Symbol = While | If | Else |
-    LBra | LPar | RBra | RPar |
-    Semi | Eof | Plus | Minus | Less | Great | Equal |
-    Id String | Number Float | Boolean Bool
+-- lexer
+
+data Symbol = SymParL
+    | SymParR
+    | SymNum Float
+    | SymBool Bool
+    | SymDef String
     deriving(Show)
 
--- Lexing
+getSymbol :: String -> Maybe (Symbol, String)
+getSymbol ('(':xs) = Just (SymParL, xs)
+getSymbol (')':xs) = Just (SymParR, xs)
+getSymbol ('#':'t':xs) = Just (SymBool True, xs)
+getSymbol ('#':'f':xs) = Just (SymBool False, xs)
+getSymbol xs = case (reads xs :: [(Float, String)]) of
+    [(n,rest)] -> Just (SymNum n,rest)
+    _ -> case (span isAlphaNum xs) of
+        (v, r)  | not (null v) && isAlphaNum (head v) -> Just (SymDef v, r)
+                | otherwise -> Nothing
 
-symbolList :: [(String,Symbol)]
-symbolList = [
-        ("while",While),
-        ("if",If),
-        ("else",Else),
-        ("true",Boolean True),
-        ("false",Boolean False)
-    ]
+_getAllSyms :: String -> Either String [Symbol]
+_getAllSyms [] = Right []
+_getAllSyms (' ':xs) = _getAllSyms xs
+_getAllSyms ('\n':xs) = _getAllSyms xs
+_getAllSyms str = case (getSymbol str) of
+    Just (sym, rest) -> case (_getAllSyms rest) of
+        Right l -> Right (l ++ [sym])
+        e -> e
+    Nothing -> Left "_getAllSyms: invalid symbol."
 
-getSymChar :: Char -> Maybe Symbol
-getSymChar '}' = Just RBra
-getSymChar '{' = Just LBra
-getSymChar '+' = Just Plus
-getSymChar '-' = Just Minus
-getSymChar '<' = Just Less
-getSymChar '>' = Just Great
-getSymChar ')' = Just RPar
-getSymChar '(' = Just LPar
-getSymChar '=' = Just Equal
-getSymChar ';' = Just Semi
-getSymChar _ = Nothing
+getAllSyms :: String -> Either String [Symbol]
+getAllSyms s = case _getAllSyms s of
+    Right l -> Right (reverse l)
+    e -> e
 
-getSymStr :: String -> Maybe (Symbol,String)
-getSymStr str = case (find (\(x,_) -> isPrefixOf x str) symbolList) of
-    Just (symstr,sym) -> Just (sym, drop (length symstr) str)
+-- parser
+
+data Token = TokElem
+    | TokDef String
+    | TokNum Float
+    | TokBool Bool
+    deriving(Show)
+
+data Node = NodeNull
+    | Node (Token, [Node])
+    deriving(Show)
+
+type Result = (Node, [Symbol])
+
+emptyNode :: Token -> Node
+emptyNode tok = Node (tok, [])
+
+parseData :: [Symbol] -> Either String Result
+parseData ((SymNum n):xs) = Right ((emptyNode (TokNum n)), xs)
+parseData ((SymBool b):xs) = Right ((emptyNode (TokBool b)), xs)
+parseData ((SymDef d):xs) = Right ((emptyNode (TokDef d)), xs)
+parseData _ = Left "parseData: invalid token."
+
+parseParenthesis :: [Symbol] -> Either String Result
+parseParenthesis [] = Left "parseParenthesis: expected ')'."
+parseParenthesis (SymParR:xs) = Right (emptyNode TokElem, xs)
+parseParenthesis xs = case (parseStatement xs) of
+    Right(n, rest) -> case (parseParenthesis rest) of
+        Right(Node(nt, chdn), l) -> Right (Node(nt, n:chdn), l)
+        Left e -> Left ("parseParenthesis.1 -> " ++ e)
+    Left e -> Left ("parseParenthesis.2 -> " ++ e)
+
+parseStatement :: [Symbol] -> Either String Result
+parseStatement (SymParL:xs) = parseParenthesis xs
+parseStatement xs = parseData xs
+
+parseThisPlease :: String -> Either String Node
+parseThisPlease s = case (getAllSyms s) of
+    Right l -> case (parseStatement l) of
+        Right (ast, []) -> Right ast
+        Right _ -> Left "parseThisPlease: extra instructions founded."
+        Left e -> Left ("parseThisPlease -> " ++ e)
+    Left e -> Left e
+
+-- env
+
+type Env = [(String, Value)]
+type BuiltinCallback = [Node] -> Env -> Either String (Value,Env)
+
+data Value = ValNone
+    | ValNum Float
+    | ValBool Bool
+    | ValBuiltin BuiltinCallback
+
+instance Show Value where
+    show ValNone = ""
+    show (ValNum n) = show n
+    show (ValBool n) = show n
+    show (ValBuiltin _) = "<function>"
+
+envRawGet :: String -> Env -> Maybe Value
+envRawGet s e = case (find (\(k, _) -> k == s) e) of
+    Just (_, v) -> Just v
     Nothing -> Nothing
 
-getSymUser :: String -> Either String (Symbol,String)
-getSymUser s = case (reads s :: [(Float, String)]) of
-    [(n,rest)] -> Right (Number n,rest)
-    _ -> case (span isAlphaNum s) of
-        (var, rest)
-            | not (null var) && isAlphaNum (head var) -> Right (Id var,rest)
-            | otherwise -> Left ("parsing: invalid word: " ++ rest)
+envGetBuiltin :: String -> Env -> Maybe BuiltinCallback
+envGetBuiltin s [] = Nothing
+envGetBuiltin s ((name, ValBuiltin f):xs)   | s == name = Just f
+                                            | otherwise = envGetBuiltin s xs
+envGetBuiltin s ((_,x):xs) = envGetBuiltin s xs
 
-getAllSyms :: String -> [Symbol] -> Either String [Symbol]
-getAllSyms [] list = Right list
-getAllSyms (' ':xs) list = getAllSyms xs list
-getAllSyms ('\n':xs) list = getAllSyms xs list
-getAllSyms (x:xs) list = case (getSymChar x) of
-    Just (Eof) -> Right list
-    Just sym -> getAllSyms xs (list++[sym])
-    Nothing -> case (getSymStr (x:xs)) of
-        Just (sym,rest) -> getAllSyms rest (list++[sym])
-        Nothing -> case (getSymUser (x:xs)) of
-            Right (sym,rest) -> getAllSyms rest (list++[sym])
-            Left err -> Left err
+envCheckExists :: String -> Env -> Bool
+envCheckExists s e = case (find (\(x,_) -> x == s) e) of
+    Just _ -> True
+    Nothing -> False
 
--- Parsing
+-- todo here: the function stuff i dont wanna do
+envDefine :: BuiltinCallback
+envDefine [(Node(TokDef k, _)), (Node(t, _))] env
+    | envCheckExists k env = Left "define: already defined."
+    | otherwise = case (tokenToValue t env) of
+        Right v -> Right (ValNone, (k, v):env)
+        Left err -> Left ("define -> " ++ err)
+envDefine _ _ = Left "define: bad format."
 
-data Token = TAdd | TSub | TLt | TGt | TIf1 | TIf2 | TWhile |
-    TEmpty | TSeq | TExpr | TProg | TSet |
-    TVar String | TConst Float
-    deriving(Show)
+defaultEnv :: Env
+defaultEnv = [
+        ("define", ValBuiltin envDefine),
+        ("paul", ValNum 42)
+    ]
 
-data Node = NullNode | Node (Token,(Node,Node,Node)) deriving(Show)
+-- eval
 
-type AST = Node
+tokenToValue :: Token -> Env -> Either String Value
+tokenToValue (TokNum n) env = Right (ValNum n)
+tokenToValue (TokBool n) env = Right (ValBool n)
+tokenToValue (TokDef d) env = case (envRawGet d env) of
+    Just x -> Right x
+    _ -> Left "tokenToValue: define not found."
+tokenToValue _ _ = Left "tokenToValue: couldn't convert token."
 
-type ParsingRes = Either String (Node,[Symbol])
-
-newNode :: Token -> Node
-newNode t = Node (t, (NullNode, NullNode, NullNode))
-
-giveResult :: Token -> [Symbol] -> ParsingRes
-giveResult t l = Right (newNode t, l)
-
-parseTerm :: [Symbol] -> ParsingRes
-parseTerm [] = Left "expected anything, but nothing was found."
-parseTerm (x:xs) = case (x) of
-    Id s -> giveResult (TVar s) xs
-    Number c -> giveResult (TConst c) xs
-    _ -> parseParen (x:xs)
-
-_parseSumloop :: [Symbol] -> Node -> ParsingRes
-_parseSumloop (Plus:xs) n = case (parseTerm xs) of
-    Right (newn, xxs) -> _parseSumloop xxs (Node (TAdd, (n, newn, NullNode)))
-    Left err -> Left ("in sum (+), " ++ err)
-_parseSumloop (Minus:xs) n = case (parseTerm xs) of
-    Right (newn, xxs) -> _parseSumloop xxs (Node (TSub, (n, newn, NullNode)))
-    Left err -> Left ("in sum (-), " ++ err)
-_parseSumloop l n = Right (n, l)
-
-parseSum :: [Symbol] -> ParsingRes
-parseSum l = case (parseTerm l) of
-    Left err -> Left ("in sum, " ++ err)
-    Right (n,xs) -> case (_parseSumloop xs n) of
-        Left err -> Left err
-        Right x -> Right x
-
-_parseTestloop :: [Symbol] -> Node -> ParsingRes
-_parseTestloop (Less:xs) n = case (parseTerm xs) of
-    Right (newn, xxs) -> _parseTestloop xxs (Node (TLt, (n, newn, NullNode)))
-    Left err -> Left ("in test (<), " ++ err)
-_parseTestloop (Great:xs) n = case (parseTerm xs) of
-    Right (newn, xxs) -> _parseTestloop xxs (Node (TGt, (n, newn, NullNode)))
-    Left err -> Left ("in test (>), " ++ err)
-_parseTestloop l n = Right (n, l)
-
-parseTest :: [Symbol] -> ParsingRes
-parseTest l = case (parseTerm l) of
-    Left err -> Left ("in test, " ++ err)
-    Right (n,xs) -> case (_parseTestloop xs n) of
-        Left err -> Left err
-        Right x -> Right x
-
-parseExpr :: [Symbol] -> ParsingRes
-parseExpr l@((Id i):xs) = case (parseTest l) of
-    Left err -> Left ("in expression, " ++ err)
-    Right (n@(Node(TVar i,_)),(Equal:xxs)) -> case (parseExpr xxs) of
-        Left err -> Left err
-        Right (nn,rest) -> Right (Node(TSet, (n, nn, NullNode)), rest)
-    Right x -> Right x
-parseExpr l = parseTest l
-
-parseParen :: [Symbol] -> ParsingRes
-parseParen (LPar:xs) = case (parseExpr xs) of
-    Right (n,(RPar:rest)) -> Right (n, rest)
-    Right (n,[]) -> Left "expected RPar, got nothing."
-    Right (n,(x:xs)) -> Left ("expected RPar, got " ++ (show x) ++ ".")
-    Left err -> Left ("in parenthesis, " ++ err)
-parseParen (x:xs) = Left ("expected left parenthesis, got " ++ (show x) ++ ".")
-parseParen [] = Left "expected left parenthesis, got nothing."
-
-_parseBrackets :: [Symbol] -> Node -> ParsingRes
-_parseBrackets (RBra:xs) n = Right (n,xs)
-_parseBrackets [] _ = Left "expect right bracket."
-_parseBrackets l n = case (parseStatement l) of
-    Left err -> Left ("in brackets, " ++ err)
-    Right (a, rest) -> _parseBrackets rest (Node(TSeq, (n, a, NullNode)))
-
-parseStatement :: [Symbol] -> ParsingRes
-parseStatement (If:xs) = case (parseParen xs) of
-    Left err -> Left ("in the if condition, " ++ err)
-    Right (a,ys) -> case (parseStatement ys) of
-        Left err -> Left ("in the if statement, " ++ err)
-        Right (b,(Else:zs)) -> case (parseStatement zs) of
-            Left err -> Left ("in the else statement, " ++ err)
-            Right (c,ns) -> Right (Node(TIf2,(a,b,c)),ns)
-        Right (b,zs) -> Right (Node(TIf1,(a,b,NullNode)),zs)
-parseStatement (While:xs) = case (parseParen xs) of
-    Left err -> Left ("in the while condition, " ++ err)
-    Right (a,ys) -> case (parseStatement ys) of
-        Left err -> Left ("in the while statement, " ++ err)
-        Right (b,zs) -> Right (Node(TWhile,(a,b,NullNode)),zs)
-parseStatement (LBra:xs) = _parseBrackets xs (newNode TEmpty)
-parseStatement l = case (parseExpr l) of
-    Right (a,(Semi:xs)) -> Right (Node(TExpr,(a,NullNode,NullNode)),xs)
-    Right (a,rest) -> Left "expected semicolon."
-    Left err -> Left ("in statement, " ++ err)
-
-parsing :: String -> Either String AST
-parsing s = case (getAllSyms s []) of
-    Right syms -> case (parseStatement syms) of
-        Right (n,_) -> Right n
-        Left err -> Left err
+evalThisTree :: Node -> Env -> Either String (Value, Env)
+evalThisTree (Node(TokElem, ((Node ((TokDef d),_)):xs))) env =
+    case (envGetBuiltin d env) of
+        Just f -> f xs env
+        _ -> Left ("eval: cant eval '" ++ d ++ "'.")
+evalThisTree (Node(tok, _)) env = case (tokenToValue tok env) of
+    Right v -> Right (v, env)
     Left err -> Left err
 
--- ce qui arrive quand je fais 'while (a < 20) { a = 10; b = 20; }'
-foo = Right (Node (TWhile,(
-    Node (TLt,(
-        Node (TVar "a",(NullNode,NullNode,NullNode)),
-        Node (TConst 20.0,(NullNode,NullNode,NullNode)),
-        NullNode)
-    ),
-    Node (TSeq,(
-        Node (TSeq,(
-            Node (TEmpty,(NullNode,NullNode,NullNode)),
-            Node (TExpr,(
-                Node (TSet,(
-                    Node (TVar "a",(NullNode,NullNode,NullNode)),
-                    Node (TConst 10.0,(NullNode,NullNode,NullNode)),
-                    NullNode)
-                ),
-                NullNode,
-                NullNode)
-            ),
-            NullNode)
-        ),
-        Node (TExpr,(
-            Node (TSet,(
-                Node (TVar "b",(NullNode,NullNode,NullNode)),
-                Node (TConst 20.0,(NullNode,NullNode,NullNode)),
-                NullNode)
-            ),
-            NullNode,
-            NullNode)
-        ),
-        NullNode)
-    ),
-    NullNode)
-))
+evalThisPlease :: Env -> String -> Either String (Value, Env)
+evalThisPlease env s = case (parseThisPlease s) of
+    Right n -> evalThisTree n env
+    Left e -> Left e
 
--- Main
+-- main code
+
+infiniteLoop :: Env -> IO String
+infiniteLoop env = putStr "\x1b[35;1mλ\x1b[m > "
+    >> hFlush stdout >> isEOF >>= (\x -> case x of
+        True -> return "code is ok"
+        False -> getLine >>= (\s -> case (evalThisPlease env s) of
+                Left err -> return ("code failed because " ++ err)
+                Right (ValNone, nenv) -> infiniteLoop nenv
+                Right (val, nenv) -> print val >> infiniteLoop nenv
+            )
+        )
 
 main :: IO()
-main = putStrLn "hello"
+main = infiniteLoop defaultEnv >>= putStrLn
