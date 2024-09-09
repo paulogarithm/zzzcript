@@ -117,10 +117,10 @@ envCheckExists s e = case (find (\(x,_) -> x == s) e) of
 
 -- todo here: the function stuff i dont wanna do
 envDefine :: BuiltinCallback
-envDefine [(Node(TokDef k, _)), (Node(t, _))] env
+envDefine [(Node(TokDef k, _)), node] env
     | envCheckExists k env = Left "define: already defined."
-    | otherwise = case (tokenToValue t env) of
-        Right v -> Right (ValNone, (k, v):env)
+    | otherwise = case (evalThisTree node env) of
+        Right (v,nenv) -> Right (ValNone, (k, v):nenv)
         Left err -> Left ("define -> " ++ err)
 envDefine _ _ = Left "define: bad format."
 
@@ -129,13 +129,14 @@ addValues (ValNum a) (ValNum b) = Right (ValNum (a + b))
 addValues _ _ = Left "addValues: cant perform add on these."
 
 envAdd :: BuiltinCallback
-envAdd [(Node(a, _)), (Node(b, _))] env = case (tokenToValue a env) of
-    Right av -> case (tokenToValue b env) of
-        Right bv -> case (addValues av bv) of
+envAdd [a, b] env = case (evalThisTree a env) of
+    Right (av,env) -> case (evalThisTree b env) of
+        Right (bv,env) -> case (addValues av bv) of
             Right v -> Right (v, env)
             Left e -> Left e
         Left e -> Left e
     Left e -> Left e
+envAdd _ _ = Left "add: bad format, expected (add a b)."
 
 defaultEnv :: Env
 defaultEnv = [
