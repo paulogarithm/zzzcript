@@ -124,10 +124,23 @@ envDefine [(Node(TokDef k, _)), (Node(t, _))] env
         Left err -> Left ("define -> " ++ err)
 envDefine _ _ = Left "define: bad format."
 
+addValues :: Value -> Value -> Either String Value
+addValues (ValNum a) (ValNum b) = Right (ValNum (a + b))
+addValues _ _ = Left "addValues: cant perform add on these."
+
+envAdd :: BuiltinCallback
+envAdd [(Node(a, _)), (Node(b, _))] env = case (tokenToValue a env) of
+    Right av -> case (tokenToValue b env) of
+        Right bv -> case (addValues av bv) of
+            Right v -> Right (v, env)
+            Left e -> Left e
+        Left e -> Left e
+    Left e -> Left e
+
 defaultEnv :: Env
 defaultEnv = [
         ("define", ValBuiltin envDefine),
-        ("paul", ValNum 42)
+        ("add", ValBuiltin envAdd)
     ]
 
 -- eval
