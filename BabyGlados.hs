@@ -1,5 +1,5 @@
 import Text.Read(reads)
-import Data.Char(isAlphaNum)
+import Data.Char(isDigit, isSeparator)
 import Data.List(find)
 import System.IO(isEOF, hFlush, stdout)
 import System.Exit(exitWith, ExitCode( ExitSuccess, ExitFailure))
@@ -13,6 +13,9 @@ data Symbol = SymParL
     | SymDef String
     deriving(Show)
 
+isDefName :: Char -> Bool
+isDefName c = (not (isDigit c)) && (not (isSeparator c))
+
 getSymbol :: String -> Maybe (Symbol, String)
 getSymbol ('(':xs) = Just (SymParL, xs)
 getSymbol (')':xs) = Just (SymParR, xs)
@@ -20,22 +23,22 @@ getSymbol ('#':'t':xs) = Just (SymBool True, xs)
 getSymbol ('#':'f':xs) = Just (SymBool False, xs)
 getSymbol xs = case (reads xs :: [(Float, String)]) of
     [(n,rest)] -> Just (SymNum n,rest)
-    _ -> case (span isAlphaNum xs) of
-        (v, r)  | not (null v) && isAlphaNum (head v) -> Just (SymDef v, r)
+    _ -> case (span isDefName xs) of
+        (v, r)  | not (null v) && isDefName (head v) -> Just (SymDef v, r)
                 | otherwise -> Nothing
 
-_getAllSyms :: String -> Either String [Symbol]
-_getAllSyms [] = Right []
-_getAllSyms (' ':xs) = _getAllSyms xs
-_getAllSyms ('\n':xs) = _getAllSyms xs
-_getAllSyms str = case (getSymbol str) of
-    Just (sym, rest) -> case (_getAllSyms rest) of
+getAllSyms' :: String -> Either String [Symbol]
+getAllSyms' [] = Right []
+getAllSyms' (' ':xs) = getAllSyms' xs
+getAllSyms' ('\n':xs) = getAllSyms' xs
+getAllSyms' str = case (getSymbol str) of
+    Just (sym, rest) -> case (getAllSyms' rest) of
         Right l -> Right (l ++ [sym])
         e -> e
-    Nothing -> Left "_getAllSyms: invalid symbol."
+    Nothing -> Left "getAllSyms: invalid symbol."
 
 getAllSyms :: String -> Either String [Symbol]
-getAllSyms s = case _getAllSyms s of
+getAllSyms s = case getAllSyms' s of
     Right l -> Right (reverse l)
     e -> e
 
@@ -141,7 +144,8 @@ envAdd _ _ = Left "add: bad format, expected (add a b)."
 defaultEnv :: Env
 defaultEnv = [
         ("define", ValBuiltin envDefine),
-        ("add", ValBuiltin envAdd)
+        ("+", ValBuiltin envAdd),
+        ("-", ValBuiltin envSub)
     ]
 
 -- eval
@@ -171,7 +175,7 @@ evalThisPlease env s = case (parseThisPlease s) of
 -- main code
 
 infiniteLoop :: Env -> IO()
-infiniteLoop env = putStr "\x1b[35;1mλ\x1b[m > "
+infiniteLoop env = putStr "\x1b[32;1mλ\x1b[m > "
     >> hFlush stdout >> isEOF >>= (\x -> case x of
         True -> exitWith ExitSuccess
         False -> getLine >>= (\s -> case (evalThisPlease env s) of
