@@ -3,6 +3,8 @@ import Data.Char(isDigit, isSeparator)
 import Data.List(find)
 import System.IO(isEOF, hFlush, stdout)
 import System.Exit(exitWith, ExitCode(ExitSuccess, ExitFailure))
+import Data.Maybe(fromJust)
+import Data.Tuple(swap)
 
 -- lexer
 
@@ -161,6 +163,28 @@ defaultEnv = [
         ("+", ValBuiltin envAdd),
         ("-", ValBuiltin envSub)
     ]
+
+-- bytecode
+
+data ByteCode = IPush Value
+    | ICall String
+    | ISwap
+    deriving(Show)
+
+-- instance Enum ByteCode where
+--     fromEnum = fromJust . flip lookup bytecodeTable
+--     toEnum = fromJust . flip lookup (map swap bytecodeTable)
+
+-- bytecodeTable :: [(ByteCode, Int)]
+-- bytecodeTable = [(IPush, 0), (IPop, 1), (ICall, 2)]
+
+nodeToClosure :: [Node] -> [ByteCode]
+nodeToClosure _ = []
+
+-- vm
+
+closureToValue :: [ByteCode] -> [Value] -> Value
+closureToValue _ _ = ValNone
 
 -- eval
 
