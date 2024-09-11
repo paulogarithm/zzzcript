@@ -2,7 +2,7 @@ import Text.Read(reads)
 import Data.Char(isDigit, isSeparator)
 import Data.List(find)
 import System.IO(isEOF, hFlush, stdout)
-import System.Exit(exitWith, ExitCode( ExitSuccess, ExitFailure))
+import System.Exit(exitWith, ExitCode(ExitSuccess, ExitFailure))
 
 -- lexer
 
@@ -131,6 +131,10 @@ addValues :: Value -> Value -> Either String Value
 addValues (ValNum a) (ValNum b) = Right (ValNum (a + b))
 addValues _ _ = Left "addValues: cant perform add on these."
 
+subValues :: Value -> Value -> Either String Value
+subValues (ValNum a) (ValNum b) = Right (ValNum (a - b))
+subValues _ _ = Left "subValues: cant perform add on these."
+
 envAdd :: BuiltinCallback
 envAdd [a, b] env = case (evalThisTree a env) of
     Right (av,env) -> case (evalThisTree b env) of
@@ -140,6 +144,16 @@ envAdd [a, b] env = case (evalThisTree a env) of
         Left e -> Left e
     Left e -> Left e
 envAdd _ _ = Left "add: bad format, expected (add a b)."
+
+envSub :: BuiltinCallback
+envSub [a, b] env = case (evalThisTree a env) of
+    Right (av,env) -> case (evalThisTree b env) of
+        Right (bv,env) -> case (subValues av bv) of
+            Right v -> Right (v, env)
+            Left e -> Left e
+        Left e -> Left e
+    Left e -> Left e
+envSub _ _ = Left "sub: bad format, expected (sub a b)."
 
 defaultEnv :: Env
 defaultEnv = [
