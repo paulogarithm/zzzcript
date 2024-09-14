@@ -25,6 +25,7 @@ getSymbol ('(':xs) = Just (SymParL, xs)
 getSymbol (')':xs) = Just (SymParR, xs)
 getSymbol ('#':'t':xs) = Just (SymBool True, xs)
 getSymbol ('#':'f':xs) = Just (SymBool False, xs)
+getSymbol ('-':' ':xs) = Just (SymDef "-", xs)
 getSymbol xs = case (reads xs :: [(Float, String)]) of
     [(n,rest)] -> Just (SymNum n,rest)
     _ -> case (span isDefName xs) of
@@ -221,7 +222,7 @@ defaultEnv = [
         ("if", ValBuiltin envIf),
         ("+", ValBuiltin (envOperation addValues)),
         ("-", ValBuiltin (envOperation subValues)),
-        ("*", ValBuiltin (envOperation subValues)),
+        ("*", ValBuiltin (envOperation mulValues)),
         ("eq?", ValBuiltin (envOperation eqValues)),
         ("<", ValBuiltin (envOperation ltValues)),
         (">", ValBuiltin (envOperation gtValues)),
@@ -266,7 +267,7 @@ tokenToValue (TokBool n) env = Right (ValBool n)
 tokenToValue (TokDef d) env = case (envRawGet d env) of
     Just x -> Right x
     _ -> Left ("tokenToValue: you didnt defined '" ++ d ++ "'.")
-tokenToValue _ _ = Left "tokenToValue: couldn't convert token."
+tokenToValue t _ = Left ("tokenToValue: couldn't convert token " ++ show t ++ ".")
 
 evalThisTree :: Node -> Env -> Either String (Value, Env)
 evalThisTree (Node(TokElem, ((Node ((TokDef d),_)):xs))) env =
@@ -276,12 +277,14 @@ evalThisTree (Node(TokElem, ((Node ((TokDef d),_)):xs))) env =
         _ -> Left ("eval: cant eval '" ++ d ++ "'.")
 evalThisTree (Node(tok, _)) env = case (tokenToValue tok env) of
     Right v -> Right (v, env)
-    Left err -> Left err
+    Left err -> Left ("evalThisTree -> " ++ err)
 
 evalThisLinePlease :: Env -> String -> Either String (Value, Env)
 evalThisLinePlease env s = case (parseThisPlease s) of
-    Right n -> evalThisTree n env
-    Left e -> Left e
+    Right n -> case evalThisTree n env of
+        Right a -> Right a
+        Left err -> Left err
+    Left e -> Left ("evalThisLinePlease -> " ++ e)
 
 -- main code
 
