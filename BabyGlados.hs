@@ -190,6 +190,8 @@ gtValues _ _ = Left "gtValues: cant perform gt on these."
 eqValues :: Value -> Value -> Either String Value
 eqValues (ValNum a) (ValNum b) = Right (ValBool (a == b))
 eqValues (ValBool a) (ValBool b) = Right (ValBool (a == b))
+eqValues ValNone ValNone = Right (ValBool True)
+eqValues _ ValNone = Right (ValBool False)
 eqValues _ _ = Left "eqValues: cant perform eq on these."
 
 envOperation :: Operation -> BuiltinCallback
