@@ -96,6 +96,7 @@ type Env = [(String, Value)]
 type CallbackResult = Either String (Value, Env)
 type BuiltinCallback = [Node] -> Env -> CallbackResult
 type FunctionBody = ([String], Node)
+type Operation = Value -> Value -> Either String Value
 
 data Value = ValNone
     | ValNum Float
@@ -165,34 +166,66 @@ subValues :: Value -> Value -> Either String Value
 subValues (ValNum a) (ValNum b) = Right (ValNum (a - b))
 subValues _ _ = Left "subValues: cant perform add on these."
 
-envAdd :: BuiltinCallback
-envAdd [a, b] env = case (evalThisTree a env) of
-    Right (av,env) -> case (evalThisTree b env) of
-        Right (bv,env) -> case (addValues av bv) of
-            Right v -> Right (v, env)
-            Left e -> Left e
-        Left e -> Left e
-    Left e -> Left e
-envAdd _ _ = Left "add: bad format, expected (add a b)."
+ltValues :: Value -> Value -> Either String Value
+ltValues (ValNum a) (ValNum b) = Right (ValBool (a < b))
+ltValues _ _ = Left "ltValues: cant perform lt on these."
 
-envSub :: BuiltinCallback
-envSub [a, b] env = case (evalThisTree a env) of
+mulValues :: Value -> Value -> Either String Value
+mulValues (ValNum a) (ValNum b) = Right (ValNum (a * b))
+mulValues _ _ = Left "mulValues: cant perform mul on these."
+
+divValues :: Value -> Value -> Either String Value
+divValues (ValNum a) (ValNum b) = Right (ValNum (a / b))
+divValues _ _ = Left "divValues: cant perform div on these."
+
+modValues :: Value -> Value -> Either String Value
+modValues (ValNum a) (ValNum b) = Right (ValNum (modulate))
+    where modulate = fromIntegral (mod (round a) (round b))
+modValues _ _ = Left "midValues: cant perform mod on these."
+
+gtValues :: Value -> Value -> Either String Value
+gtValues (ValNum a) (ValNum b) = Right (ValBool (a > b))
+gtValues _ _ = Left "gtValues: cant perform gt on these."
+
+eqValues :: Value -> Value -> Either String Value
+eqValues (ValNum a) (ValNum b) = Right (ValBool (a == b))
+eqValues (ValBool a) (ValBool b) = Right (ValBool (a == b))
+eqValues _ _ = Left "eqValues: cant perform eq on these."
+
+envOperation :: Operation -> BuiltinCallback
+envOperation op [a, b] env = case (evalThisTree a env) of
     Right (av,env) -> case (evalThisTree b env) of
-        Right (bv,env) -> case (subValues av bv) of
+        Right (bv,env) -> case (op av bv) of
             Right v -> Right (v, env)
             Left e -> Left e
         Left e -> Left e
     Left e -> Left e
-envSub _ _ = Left "sub: bad format, expected (sub a b)."
+envOperation _ _ _ = Left "operation: bad format, expected (operation a b)."
 
 envShowEnv :: BuiltinCallback
 envShowEnv _ env = Right (ValDebug env, env)
 
+envIf :: BuiltinCallback
+envIf [c, t, e] env = case (evalThisTree c env) of
+    Right (ValBool b, nenv) -> if b
+        then evalThisTree t nenv
+        else evalThisTree e nenv
+    Right _ -> Left "envIf: expected boolean."
+    Left err -> Left ("envIf -> " ++ err)
+
 defaultEnv :: Env
 defaultEnv = [
         ("define", ValBuiltin envDefine),
-        ("+", ValBuiltin envAdd),
-        ("-", ValBuiltin envSub),
+        ("if", ValBuiltin envIf),
+        ("+", ValBuiltin (envOperation addValues)),
+        ("-", ValBuiltin (envOperation subValues)),
+        ("*", ValBuiltin (envOperation subValues)),
+        ("eq?", ValBuiltin (envOperation eqValues)),
+        ("<", ValBuiltin (envOperation ltValues)),
+        (">", ValBuiltin (envOperation gtValues)),
+        ("mod", ValBuiltin (envOperation modValues)),
+        ("div", ValBuiltin (envOperation divValues)),
+        ("null", ValNone),
         ("showenv", ValBuiltin envShowEnv)
     ]
 
