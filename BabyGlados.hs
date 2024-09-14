@@ -102,6 +102,7 @@ data Value = ValNone
     | ValBool Bool
     | ValBuiltin BuiltinCallback
     | ValFunction FunctionBody
+    | ValDebug Env
 
 instance Show Value where
     show ValNone = "<none>"
@@ -109,6 +110,7 @@ instance Show Value where
     show (ValBool n) = show n
     show (ValBuiltin _) = "<procedure>"
     show (ValFunction (x,_)) = "<function" ++ show x ++ ">"
+    show (ValDebug e) = show e
 
 envRawGet :: String -> Env -> Maybe Value
 envRawGet s e = case (find (\(k, _) -> k == s) e) of
@@ -139,19 +141,18 @@ funcGetOnlyDefs (Node(TokDef s, _):xs) ys = case funcGetOnlyDefs xs ys of
 funcGetOnlyDefs _ _ = Left "funcOnlyDef: not a TokDef."
 
 createFunction' :: (String, [String]) -> Node -> Env -> (Value, Env)
-createFunction' (n, a) b env = (ValNone, (n, (ValFunction (a, b))):env)
+createFunction' (n, a) b env = (ValNone, (n, (ValFunction (a, b))):nenv)
+        where nenv = filter (\(x, _) -> x /= n) env
 
 createFunction :: [Node] -> Node -> Env -> CallbackResult
 createFunction header body env = case funcGetOnlyDefs header [] of
     Right x -> Right (createFunction' x body env)
     Left err -> Left ("createFunction -> " ++ err)
 
--- todo here: the function stuff i dont wanna do
 envDefine :: BuiltinCallback
-envDefine [(Node(TokDef k, _)), node] env
-    | envCheckExists k env = Left "define: already defined."
-    | otherwise = case (evalThisTree node env) of
-        Right (v,nenv) -> Right (ValNone, (k, v):nenv)
+envDefine [(Node(TokDef k, _)), node] env = case (evalThisTree node env) of
+        Right (v,nenv) -> Right (ValNone, (k, v):nenvf)
+            where nenvf = filter (\(x, _) -> x /= k) nenv
         Left err -> Left ("define -> " ++ err)
 envDefine [(Node(TokElem, headr)), body] env = (createFunction headr body env)
 envDefine _ _ = Left "define: bad format."
@@ -184,11 +185,15 @@ envSub [a, b] env = case (evalThisTree a env) of
     Left e -> Left e
 envSub _ _ = Left "sub: bad format, expected (sub a b)."
 
+envShowEnv :: BuiltinCallback
+envShowEnv _ env = Right (ValDebug env, env)
+
 defaultEnv :: Env
 defaultEnv = [
         ("define", ValBuiltin envDefine),
         ("+", ValBuiltin envAdd),
-        ("-", ValBuiltin envSub)
+        ("-", ValBuiltin envSub),
+        ("showenv", ValBuiltin envShowEnv)
     ]
 
 -- bytecode
@@ -238,8 +243,8 @@ evalThisTree (Node(tok, _)) env = case (tokenToValue tok env) of
     Right v -> Right (v, env)
     Left err -> Left err
 
-evalThisPlease :: Env -> String -> Either String (Value, Env)
-evalThisPlease env s = case (parseThisPlease s) of
+evalThisLinePlease :: Env -> String -> Either String (Value, Env)
+evalThisLinePlease env s = case (parseThisPlease s) of
     Right n -> evalThisTree n env
     Left e -> Left e
 
@@ -249,7 +254,7 @@ infiniteLoop :: Env -> IO()
 infiniteLoop env = putStr "\x1b[32;1mλ\x1b[m > "
     >> hFlush stdout >> isEOF >>= (\x -> case x of
         True -> exitWith ExitSuccess
-        False -> getLine >>= (\s -> case (evalThisPlease env s) of
+        False -> getLine >>= (\s -> case (evalThisLinePlease env s) of
                 Left err -> putStrLn ("code failed because " ++ err)
                     >> exitWith (ExitFailure 84)
                 Right (ValNone, nenv) -> infiniteLoop nenv
