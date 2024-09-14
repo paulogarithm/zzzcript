@@ -16,6 +16,8 @@ data Symbol = SymParL
     deriving(Show)
 
 isDefName :: Char -> Bool
+isDefName ')' = False
+isDefName '(' = False
 isDefName c = (not (isDigit c)) && (not (isSeparator c))
 
 getSymbol :: String -> Maybe (Symbol, String)
@@ -91,34 +93,58 @@ parseThisPlease s = case (getAllSyms s) of
 -- env
 
 type Env = [(String, Value)]
-type BuiltinCallback = [Node] -> Env -> Either String (Value,Env)
+type CallbackResult = Either String (Value, Env)
+type BuiltinCallback = [Node] -> Env -> CallbackResult
+type FunctionBody = ([String], Node)
 
 data Value = ValNone
     | ValNum Float
     | ValBool Bool
     | ValBuiltin BuiltinCallback
+    | ValFunction FunctionBody
 
 instance Show Value where
-    show ValNone = ""
+    show ValNone = "<none>"
     show (ValNum n) = show n
     show (ValBool n) = show n
-    show (ValBuiltin _) = "<function>"
+    show (ValBuiltin _) = "<procedure>"
+    show (ValFunction (x,_)) = "<function" ++ show x ++ ">"
 
 envRawGet :: String -> Env -> Maybe Value
 envRawGet s e = case (find (\(k, _) -> k == s) e) of
     Just (_, v) -> Just v
     Nothing -> Nothing
 
-envGetBuiltin :: String -> Env -> Maybe BuiltinCallback
-envGetBuiltin s [] = Nothing
-envGetBuiltin s ((name, ValBuiltin f):xs)   | s == name = Just f
-                                            | otherwise = envGetBuiltin s xs
-envGetBuiltin s ((_,x):xs) = envGetBuiltin s xs
+envGetCallable :: String -> Env -> Maybe (Either FunctionBody BuiltinCallback)
+envGetCallable s [] = Nothing
+envGetCallable s ((name, ValBuiltin f):xs)  | s == name = Just (Right f)
+                                            | otherwise = envGetCallable s xs
+envGetCallable s ((name, ValFunction f):xs) | s == name = Just (Left f)
+                                            | otherwise = envGetCallable s xs
+envGetCallable s ((_,x):xs) = envGetCallable s xs
 
 envCheckExists :: String -> Env -> Bool
 envCheckExists s e = case (find (\(x,_) -> x == s) e) of
     Just _ -> True
     Nothing -> False
+
+funcGetOnlyDefs :: [Node] -> [String] -> Either String (String, [String])
+funcGetOnlyDefs [] x = Right ("", x)
+funcGetOnlyDefs (Node(TokDef x, _):xs) [] = case funcGetOnlyDefs xs [x] of
+    Right (_, ys) -> Right (x, reverse $ tail $ reverse ys)
+    Left err -> Left err
+funcGetOnlyDefs (Node(TokDef s, _):xs) ys = case funcGetOnlyDefs xs ys of
+    Right (a, b) -> Right (a, s:b)
+    Left err -> Left err
+funcGetOnlyDefs _ _ = Left "funcOnlyDef: not a TokDef."
+
+createFunction' :: (String, [String]) -> Node -> Env -> (Value, Env)
+createFunction' (n, a) b env = (ValNone, (n, (ValFunction (a, b))):env)
+
+createFunction :: [Node] -> Node -> Env -> CallbackResult
+createFunction header body env = case funcGetOnlyDefs header [] of
+    Right x -> Right (createFunction' x body env)
+    Left err -> Left ("createFunction -> " ++ err)
 
 -- todo here: the function stuff i dont wanna do
 envDefine :: BuiltinCallback
@@ -127,6 +153,7 @@ envDefine [(Node(TokDef k, _)), node] env
     | otherwise = case (evalThisTree node env) of
         Right (v,nenv) -> Right (ValNone, (k, v):nenv)
         Left err -> Left ("define -> " ++ err)
+envDefine [(Node(TokElem, headr)), body] env = (createFunction headr body env)
 envDefine _ _ = Left "define: bad format."
 
 addValues :: Value -> Value -> Either String Value
@@ -171,22 +198,27 @@ data ByteCode = IPush Value
     | ISwap
     deriving(Show)
 
--- instance Enum ByteCode where
---     fromEnum = fromJust . flip lookup bytecodeTable
---     toEnum = fromJust . flip lookup (map swap bytecodeTable)
-
--- bytecodeTable :: [(ByteCode, Int)]
--- bytecodeTable = [(IPush, 0), (IPop, 1), (ICall, 2)]
-
 nodeToClosure :: [Node] -> [ByteCode]
 nodeToClosure _ = []
 
--- vm
-
-closureToValue :: [ByteCode] -> [Value] -> Value
-closureToValue _ _ = ValNone
-
 -- eval
+
+extendEnv :: [Node] -> [String] -> Env -> Either String Env
+extendEnv [] [] env = Right env
+extendEnv (node:ns) (key:ks) env1 = case evalThisTree node env1 of
+    Right (value, env2) -> case extendEnv ns ks env2 of
+        Right nenv -> Right ((key, value):nenv)
+        Left err -> Left err
+    Left err -> Left ("extendEnv -> " ++ err)
+extendEnv [] _ _ = Left "extendEnv: too few arguments."
+extendEnv _ [] _ = Left "extendEnv: too many arguments."
+
+callFunction :: [Node] -> FunctionBody -> Env -> Either String (Value, Env)
+callFunction ns (ks, body) env = case extendEnv ns ks env of
+        Right nenv -> case evalThisTree body nenv of
+            Right (v, _) -> Right (v, env)
+            Left err -> Left ("callFunction -> " ++ err)
+        Left err -> Left ("callFunction -> " ++ err)
 
 tokenToValue :: Token -> Env -> Either String Value
 tokenToValue (TokNum n) env = Right (ValNum n)
@@ -198,8 +230,9 @@ tokenToValue _ _ = Left "tokenToValue: couldn't convert token."
 
 evalThisTree :: Node -> Env -> Either String (Value, Env)
 evalThisTree (Node(TokElem, ((Node ((TokDef d),_)):xs))) env =
-    case (envGetBuiltin d env) of
-        Just f -> f xs env
+    case (envGetCallable d env) of
+        Just (Right f) -> f xs env
+        Just (Left f) -> callFunction xs f env
         _ -> Left ("eval: cant eval '" ++ d ++ "'.")
 evalThisTree (Node(tok, _)) env = case (tokenToValue tok env) of
     Right v -> Right (v, env)
