@@ -104,15 +104,16 @@ data Value = ValNone
     | ValBool Bool
     | ValBuiltin BuiltinCallback
     | ValFunction FunctionBody
-    | ValDebug Env
+    | ValEnv Env
 
 instance Show Value where
-    show ValNone = "<none>"
+    show ValNone = "#<none>"
     show (ValNum n) = show n
-    show (ValBool n) = show n
-    show (ValBuiltin _) = "<procedure>"
-    show (ValFunction (x,_)) = "<function" ++ show x ++ ">"
-    show (ValDebug e) = show e
+    show (ValBool True) = "#t"
+    show (ValBool False) = "#f"
+    show (ValBuiltin _) = "#<procedure>"
+    show (ValFunction _) = "#<procedure>"
+    show (ValEnv e) = show e
 
 envRawGet :: String -> Env -> Maybe Value
 envRawGet s e = case (find (\(k, _) -> k == s) e) of
@@ -150,6 +151,11 @@ createFunction :: [Node] -> Node -> Env -> CallbackResult
 createFunction header body env = case funcGetOnlyDefs header [] of
     Right x -> Right (createFunction' x body env)
     Left err -> Left ("createFunction -> " ++ err)
+
+envLambda :: BuiltinCallback
+envLambda [(Node(TokElem, prms)), body] env = case (funcGetOnlyDefs prms []) of
+    Right (x, xs) -> Right (ValFunction (x:xs, body), env)
+    Left err -> Left $ "lambda -> " ++ err
 
 envDefine :: BuiltinCallback
 envDefine [(Node(TokDef k, _)), node] env = case (evalThisTree node env) of
@@ -206,7 +212,7 @@ envOperation op [a, b] env = case (evalThisTree a env) of
 envOperation _ _ _ = Left "operation: bad format, expected (operation a b)."
 
 envShowEnv :: BuiltinCallback
-envShowEnv _ env = Right (ValDebug env, env)
+envShowEnv _ env = Right (ValEnv env, env)
 
 envIf :: BuiltinCallback
 envIf [c, t, e] env = case (evalThisTree c env) of
@@ -229,6 +235,7 @@ defaultEnv = [
         ("mod", ValBuiltin (envOperation modValues)),
         ("div", ValBuiltin (envOperation divValues)),
         ("null", ValNone),
+        ("lambda", ValBuiltin envLambda),
         ("showenv", ValBuiltin envShowEnv)
     ]
 
@@ -267,14 +274,24 @@ tokenToValue (TokBool n) env = Right (ValBool n)
 tokenToValue (TokDef d) env = case (envRawGet d env) of
     Just x -> Right x
     _ -> Left ("tokenToValue: you didnt defined '" ++ d ++ "'.")
-tokenToValue t _ = Left ("tokenToValue: couldn't convert token " ++ show t ++ ".")
+tokenToValue t _ =
+    Left $ "tokenToValue: couldn't convert token " ++ show t ++ "."
+
+evalFunctionCall :: String -> Env -> [Node] -> CallbackResult
+evalFunctionCall d env xs = case (envGetCallable d env) of
+    Just (Right f) -> f xs env
+    Just (Left f) -> callFunction xs f env
+    _ -> Left $ "eval: cant eval '" ++ d ++ "'."
 
 evalThisTree :: Node -> Env -> Either String (Value, Env)
+evalThisTree (Node(TokElem, ((Node ((TokDef "lambda"),_)):xs))) env = 
+    envLambda xs env
 evalThisTree (Node(TokElem, ((Node ((TokDef d),_)):xs))) env =
-    case (envGetCallable d env) of
-        Just (Right f) -> f xs env
-        Just (Left f) -> callFunction xs f env
-        _ -> Left ("eval: cant eval '" ++ d ++ "'.")
+    evalFunctionCall d env xs
+evalThisTree (Node(TokElem, (node:xs))) env = case (evalThisTree node env) of
+    Right (ValFunction f,env) -> callFunction xs f env
+    Right x -> Right x
+    Left err -> Left $ "evalThisTree -> " ++ err
 evalThisTree (Node(tok, _)) env = case (tokenToValue tok env) of
     Right v -> Right (v, env)
     Left err -> Left ("evalThisTree -> " ++ err)
@@ -289,8 +306,7 @@ evalThisLinePlease env s = case (parseThisPlease s) of
 -- main code
 
 infiniteLoop :: Env -> IO()
-infiniteLoop env = putStr "\x1b[32;1mλ\x1b[m > "
-    >> hFlush stdout >> isEOF >>= (\x -> case x of
+infiniteLoop env = isEOF >>= (\x -> case x of
         True -> exitWith ExitSuccess
         False -> getLine >>= (\s -> case (evalThisLinePlease env s) of
                 Left err -> putStrLn ("code failed because " ++ err)
