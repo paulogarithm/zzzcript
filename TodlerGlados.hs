@@ -1,5 +1,14 @@
 import Data.List(isPrefixOf, find)
 import Data.Char(isAlpha, isAlphaNum)
+import Foreign.Storable(Storable, poke, peek)
+import Foreign.Marshal.Alloc(alloca)
+import Foreign.Ptr(castPtr)
+import System.IO.Unsafe(unsafePerformIO)
+import Data.Bits(shiftR, (.&.), (.|.))
+import Data.Word(Word8, Word32, Word64)
+
+type Float32 = Float
+type Float64 = Double
 
 -- lexer
 
@@ -160,7 +169,9 @@ parseStatement sx@(SymDef d:xs) = case (parseCall sx) of
     Left err -> Left $ "statement -> " ++ err
     Right (n, (SymComma:xs)) -> Right (n, xs)
     Right _ -> Left $ "call of " ++ show d ++ ": expected ';'."
-parseStatement _ = Left "statement: invalid token."
+parseStatement (SymComma:xs) = parseStatement xs
+parseStatement (x:xs) = Left $ "statement: invalid token '" ++ show x ++ "'."
+parseStatement [] = Left "statement: expected token."
 
 -- paren ::= ( <test> )
 parseParen :: [Symbol] -> Either String (Node, [Symbol])
@@ -206,6 +217,72 @@ parseBlock (SymBra DirOpen:xs) = case (parseBlock' xs) of
     Left err -> Left $ "block -> " ++ err
     Right (nodes, xs) -> Right (Node(TokBlock, nodes), xs)
 parseBlock xs = parseLine xs
+
+-- compiler
+
+data OpCode = OpLoad
+    | OpCall
+    deriving(Show, Eq, Bounded)
+
+doubleRawcastInt :: Float64 -> Word64
+doubleRawcastInt f = unsafePerformIO i
+    where i = alloca (\p -> poke (castPtr p) f >> peek p) :: IO Word64
+
+floatRawcastInt :: Float32 -> Word32
+floatRawcastInt f = unsafePerformIO i
+    where i = alloca (\p -> poke (castPtr p) f >> peek p) :: IO Word32
+
+-- /* Add ULEB128 value to buffer. */
+-- static void bcwrite_uleb128(BCWriteCtx *ctx, uint32_t v)
+-- {
+--   MSize n = ctx->sb.n;
+--   uint8_t *p = (uint8_t *)ctx->sb.buf;
+--   for (; v >= 0x80; v >>= 7)
+--     p[n++] = (uint8_t)((v & 0x7f) | 0x80);
+--   p[n++] = (uint8_t)v;
+--   ctx->sb.n = n;
+-- }
+
+
+word32toword8' :: Word32 -> [Word8]
+word32toword8' x = map fromIntegral [ x .&. 0xff ]
+
+word32toword8 :: Word32 -> Word8
+word32toword8 x = head $ word32toword8' x
+
+uleb128Encode' :: Word32 -> [Word8] -> [Word8]
+uleb128Encode' x list   | x >= 0x80 = uleb128Encode' newV newList 
+                        | otherwise = list ++ [k .&. 0xff]
+                        where   newV = x `shiftR` 7
+                                newList = list ++ [((k .&. 0x7f) .|. 0x80) .&. 0xff]
+                                k = word32toword8 x
+
+uleb128Encode :: Word32 -> [Word8]
+uleb128Encode x = uleb128Encode' x []
+
+word64splitter :: Word64 -> (Word32, Word32)
+word64splitter x = (fromIntegral (x .&. 0xFFFFFFFF), fromIntegral (x `shiftR` 32))
+
+double2uleb :: Float64 -> [Word8]
+double2uleb n = (uleb128Encode x) ++ (uleb128Encode y)
+    where   x = fst res
+            y = snd res
+            res = word64splitter $ doubleRawcastInt n
+
+opNumbers :: [(Int, OpCode)]
+opNumbers = [(0, OpLoad)]
+
+-- instance Enum OpCode where
+--     fromEnum n = case (find (\(_, y) -> y == n) opNumbers) of
+--         Just (x, _) -> x
+--         Nothing -> error $ "opcode: '" ++ show n ++ "' not found."
+
+data OpValue = OpCode OpCode
+    | OpValue Float
+    deriving(Show, Eq)
+
+-- compileThisPlease :: Node -> [Int]
+-- compileThisPlease _ = [fromEnum OpLoad]
 
 -- main
 
