@@ -1,4 +1,4 @@
-import Data.List(isPrefixOf, find)
+import Data.List(isPrefixOf, find, elemIndex)
 import Data.Char(isAlpha, isAlphaNum)
 import Foreign.Storable(Storable, poke, peek)
 import Foreign.Marshal.Alloc(alloca)
@@ -44,6 +44,7 @@ data Symbol = SymSet
     | SymBool Bool
     | SymComma
     | SymSep
+    | SymString String
     deriving Show
 
 symKeywordList :: [(String, Symbol)]
@@ -76,10 +77,18 @@ symNextSym xs = case (find (\(x, _) -> isPrefixOf x xs) symOpeList) of
         Just (s, sym) -> Right (sym, drop (length s) xs)
         Nothing -> symGetValue xs
 
+symGetString :: String -> Either String [Symbol]
+symGetString str = case (elemIndex '"' str) of
+    Just x -> case symGetAll $ drop (succ x) str of
+        Right xs -> Right ((SymString $ take x str) : xs)
+        Left err -> Left err
+    Nothing -> Left "string: can't get end of string..."
+
 symGetAll :: String -> Either String [Symbol]
 symGetAll "" = Right []
 symGetAll (' ':xs) = symGetAll xs
 symGetAll ('\n':xs) = symGetAll xs
+symGetAll ('"':xs) = symGetString xs
 symGetAll a = case (symNextSym a) of
     Right (sym, b) -> case (symGetAll b) of
         Right xs -> Right $ sym:xs
@@ -98,6 +107,7 @@ data Token = TokProcedure
     | TokBlock
     | TokIf
     | TokCall String
+    | TokString String
     deriving(Show)
 
 data Node = Node (Token, [Node]) deriving(Show)
@@ -105,13 +115,14 @@ data Node = Node (Token, [Node]) deriving(Show)
 emptyNode :: Token -> Node
 emptyNode t = Node(t, [])
 
--- term ::= <def> | <float> | <bool> | <call> | <parenexpr>
+-- term ::= <def> | <float> | <bool> | <call> | <string> | <parenexpr>
 parseTerm :: [Symbol] -> Either String (Node, [Symbol])
 parseTerm [] = Left "parsing: expected value, got nothing."
 parseTerm (SymBool b:xs) = Right (emptyNode $ TokBool b, xs)
 parseTerm (SymNum n:xs) = Right (emptyNode $ TokNum n, xs)
 parseTerm sx@(SymDef d:SymPar DirOpen:xs) = parseCall sx
 parseTerm (SymDef d:xs) = Right (emptyNode $ TokDef d, xs)
+parseTerm (SymString s:xs) = Right (emptyNode $ TokString s, xs)
 parseTerm xs = parseParen xs
 
 -- operation ::= <term> | <operation> <opesym> <term>
