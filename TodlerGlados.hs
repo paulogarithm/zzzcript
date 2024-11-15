@@ -19,6 +19,7 @@ data SymKeyword = SkFunc
     | SkIf
     | SkElse
     | SkReturn
+    | SkBasically
     deriving(Show)
 
 data SymOperator = SoPlus
@@ -50,7 +51,7 @@ data Symbol = SymSet
 symKeywordList :: [(String, Symbol)]
 symKeywordList = [("func", SymKW SkFunc), ("true", SymBool True),
         ("false", SymBool False), ("if", SymKW SkIf), ("else", SymKW SkElse),
-        ("return", SymKW SkReturn)
+        ("return", SymKW SkReturn), ("basically", SymKW SkBasically)
     ]
 
 symOpeList :: [(String, Symbol)]
@@ -108,6 +109,9 @@ data Token = TokProcedure
     | TokIf
     | TokCall String
     | TokString String
+    | TokFunction String
+    | TokArgs
+    | TokReturn
     deriving(Show)
 
 data Node = Node (Token, [Node]) deriving(Show)
@@ -153,19 +157,20 @@ parseTest sx = case (parseOperation sx) of
         Left err -> Left err
         Right x -> Right x
 
--- call ::= <def> ( <test>, <test>, ... )
-parseCallChildren :: [Symbol] -> Either String ([Node], [Symbol])
-parseCallChildren sx = case (parseTest sx) of
-    Left err -> Left ("call -> " ++ err)
+-- callSeries ::= <test>, <test>, ... )
+parseCallSeries :: [Symbol] -> Either String ([Node], [Symbol])
+parseCallSeries sx = case (parseTest sx) of
+    Left err -> Left ("callSeries -> " ++ err)
     Right (n, (SymPar DirClose:xs)) -> Right ([n], xs)
-    Right (n, (SymSep:xs)) -> case (parseCallChildren xs) of
+    Right (n, (SymSep:xs)) -> case (parseCallSeries xs) of
         Left err -> Left err
         Right (nx, sx) -> Right (n:nx, sx)
 
+-- call ::= <def> <series>
 parseCall :: [Symbol] -> Either String (Node, [Symbol])
 parseCall (SymDef f:SymPar DirOpen:SymPar DirClose:xs) =
     Right (emptyNode $ TokCall f, xs)
-parseCall (SymDef f:SymPar DirOpen:xs) = case (parseCallChildren xs) of
+parseCall (SymDef f:SymPar DirOpen:xs) = case (parseCallSeries xs) of
     Left err -> Left err
     Right (nx, xs) -> Right (Node(TokCall f, nx), xs)
 parseCall _ = Left "call: expected 'func(...)'."
@@ -214,7 +219,7 @@ parseLine :: [Symbol] -> Either String (Node, [Symbol])
 parseLine sx@(SymKW SkIf:xs) = parseIf sx
 parseLine xs = parseStatement xs
 
--- block ::= { <line> <line> ... } | <line>
+-- block ::= { <line> <line> ... return <test> } | <line>
 parseBlock' :: [Symbol] -> Either String ([Node], [Symbol])
 parseBlock' (SymBra DirClose:xs) = Right ([], xs)
 parseBlock' xs = case (parseLine xs) of
@@ -228,6 +233,29 @@ parseBlock (SymBra DirOpen:xs) = case (parseBlock' xs) of
     Left err -> Left $ "block -> " ++ err
     Right (nodes, xs) -> Right (Node(TokBlock, nodes), xs)
 parseBlock xs = parseLine xs
+
+-- parseArgs ::= ( <test>, ... )
+parseArgs :: [Symbol] -> Either String (Node, [Symbol])
+parseArgs (SymPar DirOpen:SymPar DirClose:xs) = Right (emptyNode TokArgs, xs)
+parseArgs (SymPar DirOpen:xs) = case (parseTest xs) of
+    Left err -> Left ("arguments -> " ++ err)
+    Right (n, (SymPar DirClose:xs)) -> Right (Node(TokArgs, [n]), xs)
+    Right (n, (SymSep:xs)) -> case (parseArgs xs) of
+        Left err -> Left err
+        Right (Node(TokArgs, nx), sx) -> Right (Node(TokArgs, n:nx), sx)
+
+-- func ::= func <def> <series> <block>
+parseFunc :: [Symbol] -> Either String (Node, [Symbol])
+parseFunc (SymKW SkFunc:SymDef name:xs) = case (parseArgs xs) of
+    Left err -> Left $ "func args -> " ++ err
+    Right (args, xs) -> case (parseBlock xs) of
+        Left err -> Left $ "func body -> " ++ err
+        Right (block, xs) -> Right (Node(TokFunction name, [args, block]), xs)
+parseFunc (SymKW SkFunc:xs) = Left "func: expected function name."
+parseFunc _ = Left "func: expected a function keyword."
+
+-- startBlock ::= <basic> | <func>
+
 
 -- compiler
 
@@ -299,7 +327,7 @@ data OpValue = OpCode OpCode
 
 parseThisPlease :: String -> Either String Node
 parseThisPlease s = case (symGetAll s) of
-    Right sx -> case (parseBlock sx) of
+    Right sx -> case (parseFunc sx) of
         Right (n, _) -> Right n
         Left err -> Left ("parseThisPlease -> " ++ err)
     Left err -> Left ("parseThisPlease -> " ++ err)
