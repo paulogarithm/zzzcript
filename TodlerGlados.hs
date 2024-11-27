@@ -112,6 +112,7 @@ data Token = TokProcedure
     | TokFunction String
     | TokArgs
     | TokReturn
+    | TokFile
     deriving(Show)
 
 data Node = Node (Token, [Node]) deriving(Show)
@@ -175,7 +176,15 @@ parseCall (SymDef f:SymPar DirOpen:xs) = case (parseCallSeries xs) of
     Right (nx, xs) -> Right (Node(TokCall f, nx), xs)
 parseCall _ = Left "call: expected 'func(...)'."
 
--- statement ::= <def> = <test> | <call>
+-- statement ::= <def> = <test> | <call> | return <test>
+parseStatement' :: [Symbol] -> Either String (Node, [Symbol])
+parseStatement' (SymComma:xs) = parseStatement xs
+parseStatement' (SymKW SkReturn:xs) = case (parseTest xs) of
+    Left err -> Left $ "return -> " ++ err
+    Right (n,(SymComma:xs)) -> Right (Node(TokReturn, [n]), xs)
+parseStatement' (x:xs) = Left $ "statement: invalid token '" ++ show x ++ "'."
+parseStatement' [] = Left "statement: expected token."
+
 parseStatement :: [Symbol] -> Either String (Node, [Symbol])
 parseStatement (SymDef d:SymSet:xs) = case (parseTest xs) of
     Left err -> Left ("statement -> " ++ err)
@@ -185,9 +194,8 @@ parseStatement sx@(SymDef d:xs) = case (parseCall sx) of
     Left err -> Left $ "statement -> " ++ err
     Right (n, (SymComma:xs)) -> Right (n, xs)
     Right _ -> Left $ "call of " ++ show d ++ ": expected ';'."
-parseStatement (SymComma:xs) = parseStatement xs
-parseStatement (x:xs) = Left $ "statement: invalid token '" ++ show x ++ "'."
-parseStatement [] = Left "statement: expected token."
+parseStatement xs = parseStatement' xs
+
 
 -- paren ::= ( <test> )
 parseParen :: [Symbol] -> Either String (Node, [Symbol])
@@ -325,11 +333,15 @@ data OpValue = OpCode OpCode
 
 -- main
 
+parseThisPlease' :: [Symbol] -> [Node] -> Either String Node
+parseThisPlease' [] nodes = Right $ Node(TokFile, nodes)
+parseThisPlease' sx nodes = case (parseFunc sx) of
+    Right (n, rest) -> parseThisPlease' rest (nodes ++ [n])
+    Left err -> Left $ "parseThisPlease -> " ++ err
+
 parseThisPlease :: String -> Either String Node
 parseThisPlease s = case (symGetAll s) of
-    Right sx -> case (parseFunc sx) of
-        Right (n, _) -> Right n
-        Left err -> Left ("parseThisPlease -> " ++ err)
+    Right sx -> parseThisPlease' sx []
     Left err -> Left ("parseThisPlease -> " ++ err)
 
 dispTree :: [Node] -> Int -> IO()
