@@ -1,11 +1,11 @@
-import Data.List(isPrefixOf, find, elemIndex)
+import Data.List(isPrefixOf, find, elemIndex, elem)
 import Data.Char(isAlpha, isAlphaNum)
 import Foreign.Storable(Storable, poke, peek)
 import Foreign.Marshal.Alloc(alloca)
 import Foreign.Ptr(castPtr)
 import System.IO.Unsafe(unsafePerformIO)
 import Data.Bits(shiftR, (.&.), (.|.))
-import Data.Word(Word8, Word32, Word64)
+import Data.Word(Word8, Word16, Word32, Word64)
 
 type Float32 = Float
 type Float64 = Double
@@ -263,7 +263,74 @@ parseFunc (SymKW SkFunc:xs) = Left "func: expected function name."
 parseFunc _ = Left "func: expected a function keyword."
 
 -- startBlock ::= <basic> | <func>
+parseStartBlock :: [Symbol] -> Either String (Node, [Symbol])
+parseStartBlock _ = Left "not implemented"
 
+parseThisPlease' :: [Symbol] -> [Node] -> Either String Node
+parseThisPlease' [] nodes = Right $ Node(TokFile, nodes)
+parseThisPlease' sx nodes = case (parseFunc sx) of
+    Right (n, rest) -> parseThisPlease' rest (nodes ++ [n])
+    Left err -> Left $ "parseThisPlease -> " ++ err
+
+parseThisPlease :: String -> Either String Node
+parseThisPlease s = case (symGetAll s) of
+    Right sx -> parseThisPlease' sx []
+    Left err -> Left ("parseThisPlease -> " ++ err)
+
+dispTree :: [Node] -> Int -> IO()
+dispTree [] n = return()
+dispTree (Node(t, cx):xs) n = (putStrLn $ (replicate n ' ') ++ (show t))
+    >> dispTree cx (n + 4) >> dispTree xs n
+
+prettyParser :: String -> IO()
+prettyParser s = case (parseThisPlease s) of
+    Left err -> putStrLn $ "[ Exception Caught ] in " ++ err
+    Right tree -> dispTree [tree] 0
+
+
+-- assembler
+
+data ASMAction =
+      ISNEN     Word8 Word8
+    | JMP       Word16
+    | KSHORT    Word8 Word8
+    | UGET      Word8 Word8
+    | SUBVN     Word8 Word8 Word8
+    | CALL      Word8 Word8 Word8
+    | MULVV     Word8 Word8 Word8
+    | FNEW      Word8 Word8
+    | GGET      Word8
+    | MOV       Word8 Word8
+    | CALLM     Word8 Word8 Word8
+    | UCLO      Word16
+    | RET1      Word8 Word8
+    | RET0      Word8 Word8
+
+asmRemoveFunctions :: Node -> String -> Node
+asmRemoveFunctions (Node(TokFile, xs)) s =
+    let foo = filter (\ n@(Node(TokFunction k, _)) -> s /= k) xs
+    in Node(TokFile, foo)
+asmRemoveFunctions _ _ = error "expected TokFile node"
+
+asmGetFunctions :: Node -> String -> [Node]
+asmGetFunctions (Node(TokFile, xs)) s =
+    filter (\ n@(Node(TokFunction k, _)) -> s == k) xs
+asmGetFunctions _ _ = error "expected TokFile node"
+
+asmGetSymbols :: [Node] -> [String]
+asmGetSymbols [] = []
+asmGetSymbols (Node(TokFunction x,_):xs)
+    | elem x next = next
+    | otherwise = x : next
+    where next = asmGetSymbols xs 
+
+-- ast2LuassemblyJit :: Node -> [ASMAction]
+-- ast2LuassemblyJit node = 
+
+prettyAsm :: String -> IO()
+prettyAsm s = case (parseThisPlease s) of
+    Left err -> putStrLn $ "[ Exception Caught ] in " ++ err
+    Right (Node(_, xs)) -> print $ asmGetSymbols xs
 
 -- compiler
 
@@ -332,24 +399,3 @@ data OpValue = OpCode OpCode
 -- compileThisPlease _ = [fromEnum OpLoad]
 
 -- main
-
-parseThisPlease' :: [Symbol] -> [Node] -> Either String Node
-parseThisPlease' [] nodes = Right $ Node(TokFile, nodes)
-parseThisPlease' sx nodes = case (parseFunc sx) of
-    Right (n, rest) -> parseThisPlease' rest (nodes ++ [n])
-    Left err -> Left $ "parseThisPlease -> " ++ err
-
-parseThisPlease :: String -> Either String Node
-parseThisPlease s = case (symGetAll s) of
-    Right sx -> parseThisPlease' sx []
-    Left err -> Left ("parseThisPlease -> " ++ err)
-
-dispTree :: [Node] -> Int -> IO()
-dispTree [] n = return()
-dispTree (Node(t, cx):xs) n = (putStrLn $ (replicate n ' ') ++ (show t))
-    >> dispTree cx (n + 4) >> dispTree xs n
-
-prettyParser :: String -> IO()
-prettyParser s = case (parseThisPlease s) of
-    Left err -> putStrLn $ "[ Exception Caught ] in " ++ err
-    Right tree -> dispTree [tree] 0
