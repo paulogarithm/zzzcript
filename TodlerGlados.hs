@@ -1,4 +1,4 @@
-import Data.List(isPrefixOf, find, elemIndex, elem)
+import Data.List(isPrefixOf, find, elemIndex, elem, sort)
 import Data.Char(isAlpha, isAlphaNum)
 import Foreign.Storable(Storable, poke, peek)
 import Foreign.Marshal.Alloc(alloca)
@@ -324,7 +324,6 @@ prettyParser s = case (parseThisPlease s) of
     Left err -> putStrLn $ "[ Exception Caught ] in " ++ err
     Right tree -> dispTree [tree] 0
 
-
 -- assembler
 
 data ASMAction =
@@ -363,20 +362,36 @@ asmGetSymbols (Node(TokFunction x,_):xs)
     where next = asmGetSymbols xs
 asmGetSymbols (_:xs) = asmGetSymbols xs
 
--- asmFromSubfunction :: Node -> [ASMAction]
--- asmFromSubfunction
+asmFromSubfunction :: [Node] -> [Node] -> [ASMAction]
+asmFromSubfunction (Node(TokNum _,_):_) _ = [JMP 0]
+asmFromSubfunction (Node(TokDef _,_):_) _ = [JMP 1]
+asmFromSubfunction _ _ = [JMP 2]
 
--- asmFromFunction :: [Node] -> [ASMAction]
--- asmFromFunction fx = 
+asmUnpackFunction :: Node -> ([Node], [Node])
+asmUnpackFunction (Node(TokFunction _,(Node(TokArgs,as):bs))) = (as, bs)
 
--- ast2LuassemblyJit :: Node -> [ASMAction]
--- ast2LuassemblyJit node@(Node(TokFile, xs)) = let syms = asmGetSymbols xs in
+asmFromFunction' :: [Node] -> [ASMAction]
+asmFromFunction' [] = []
+asmFromFunction' (x:xs) = (asmFromSubfunction a b) ++ next
+    where   next = asmFromFunction' xs
+            (a, b) = asmUnpackFunction x
 
+asmFromFunction :: [Node] -> [ASMAction]
+asmFromFunction fx = asmFromFunction' $ sort fx
+
+ast2LuassemblyJit' :: Node -> [String] -> [ASMAction]
+ast2LuassemblyJit' _ [] = []
+ast2LuassemblyJit' n (x:xs) = (asmFromFunction $ asmGetFunctions n x) ++ next
+    where next = ast2LuassemblyJit' n xs
+
+ast2LuassemblyJit :: Node -> [ASMAction]
+ast2LuassemblyJit node@(Node(TokFile, xs)) =
+    ast2LuassemblyJit' node (asmGetSymbols xs)
 
 prettyAsm :: String -> IO()
 prettyAsm s = case (parseThisPlease s) of
     Left err -> putStrLn $ "[ Exception Caught ] in " ++ err
-    Right (n@(Node(_, xs))) -> print $ asmGetSymbols xs
+    Right n -> print $ ast2LuassemblyJit n
 
 -- compiler
 
