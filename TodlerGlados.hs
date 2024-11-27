@@ -26,13 +26,13 @@ data SymOperator = SoPlus
     | SoMinus
     | SoMul
     | SoDiv
-    deriving(Show)
+    deriving(Show, Eq)
 
 data SymTest = SoLT
     | SoGT
     | SoEqual
     | SoDiff
-    deriving(Show)
+    deriving(Show, Eq)
 
 data Symbol = SymSet
     | SymPar Direction
@@ -113,12 +113,48 @@ data Token = TokProcedure
     | TokArgs
     | TokReturn
     | TokFile
-    deriving(Show)
+    deriving(Show, Eq)
 
-data Node = Node (Token, [Node]) deriving(Show)
+data Node = Node (Token, [Node]) deriving(Show, Eq)
+
+typeWeights :: Node -> Int
+typeWeights (Node(TokBool _,_)) = 1
+typeWeights (Node(TokNum _,_)) = 1
+typeWeights (Node(TokString _,_)) = 1
+typeWeights (Node(TokDef _,_)) = 2
+typeWeights _ = 3
 
 emptyNode :: Token -> Node
 emptyNode t = Node(t, [])
+
+unNode :: Node -> (Token, [Node])
+unNode (Node x) = x
+
+compareTokenValues :: [Node] -> [Node] -> Ordering
+compareTokenValues [] [] = EQ
+compareTokenValues (a:as) (b:bs) = case (a, b) of
+    (Node (TokNum n1, _), Node (TokNum n2, _)) -> compare n1 n2
+    (Node (TokDef s1, _), Node (TokDef s2, _)) -> compare s1 s2
+    _ -> compare (typeWeights a) (typeWeights b)
+
+nodeCmp :: Node -> Node -> Ordering
+nodeCmp (Node(TokFunction _,(Node(TokArgs,as)):_))
+        (Node(TokFunction _,(Node(TokArgs,bs)):_))
+        | tokenCmp == EQ = compareTokenValues as bs
+        | otherwise = tokenCmp
+        where tokenCmp = compare (map typeWeights as) (map typeWeights bs)
+
+instance Ord Node where
+    compare :: Node -> Node -> Ordering
+    compare a b = nodeCmp a b
+
+foo :: [Node]
+foo = [
+        Node(TokFunction "ninon", [Node(TokArgs, [Node(TokNum 20,[])])]),
+        Node(TokFunction "penis", [Node(TokArgs, [Node(TokDef "hello",[])])]),
+        Node(TokFunction "paul", [Node(TokArgs, [Node(TokNum 19,[])])]),
+        Node(TokFunction "tom", [Node(TokArgs, [Node(TokNum 14,[])])])
+    ]
 
 -- term ::= <def> | <float> | <bool> | <call> | <string> | <parenexpr>
 parseTerm :: [Symbol] -> Either String (Node, [Symbol])
@@ -264,11 +300,12 @@ parseFunc _ = Left "func: expected a function keyword."
 
 -- startBlock ::= <basic> | <func>
 parseStartBlock :: [Symbol] -> Either String (Node, [Symbol])
-parseStartBlock _ = Left "not implemented"
+parseStartBlock = parseFunc
+-- parseStartBlock _ = Left "not implemented"
 
 parseThisPlease' :: [Symbol] -> [Node] -> Either String Node
 parseThisPlease' [] nodes = Right $ Node(TokFile, nodes)
-parseThisPlease' sx nodes = case (parseFunc sx) of
+parseThisPlease' sx nodes = case (parseStartBlock sx) of
     Right (n, rest) -> parseThisPlease' rest (nodes ++ [n])
     Left err -> Left $ "parseThisPlease -> " ++ err
 
@@ -305,6 +342,7 @@ data ASMAction =
     | UCLO      Word16
     | RET1      Word8 Word8
     | RET0      Word8 Word8
+    deriving(Show, Eq)
 
 asmRemoveFunctions :: Node -> String -> Node
 asmRemoveFunctions (Node(TokFile, xs)) s =
@@ -322,15 +360,23 @@ asmGetSymbols [] = []
 asmGetSymbols (Node(TokFunction x,_):xs)
     | elem x next = next
     | otherwise = x : next
-    where next = asmGetSymbols xs 
+    where next = asmGetSymbols xs
+asmGetSymbols (_:xs) = asmGetSymbols xs
+
+-- asmFromSubfunction :: Node -> [ASMAction]
+-- asmFromSubfunction
+
+-- asmFromFunction :: [Node] -> [ASMAction]
+-- asmFromFunction fx = 
 
 -- ast2LuassemblyJit :: Node -> [ASMAction]
--- ast2LuassemblyJit node = 
+-- ast2LuassemblyJit node@(Node(TokFile, xs)) = let syms = asmGetSymbols xs in
+
 
 prettyAsm :: String -> IO()
 prettyAsm s = case (parseThisPlease s) of
     Left err -> putStrLn $ "[ Exception Caught ] in " ++ err
-    Right (Node(_, xs)) -> print $ asmGetSymbols xs
+    Right (n@(Node(_, xs))) -> print $ asmGetSymbols xs
 
 -- compiler
 
