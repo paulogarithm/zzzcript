@@ -138,8 +138,6 @@ compareTokenValues (a:_) (b:_) = case (a, b) of
     (Node (TokNum n1, _), Node (TokNum n2, _)) -> compare n1 n2
     (Node (TokDef s1, _), Node (TokDef s2, _)) -> compare s1 s2
     _ -> compare (typeWeights a) (typeWeights b)
-compareTokenValues _ [] = GT
-compareTokenValues [] _ = LT
 
 nodeCmp :: Node -> Node -> Ordering
 nodeCmp (Node(TokFunction _,(Node(TokArgs,as)):_))
@@ -147,7 +145,6 @@ nodeCmp (Node(TokFunction _,(Node(TokArgs,as)):_))
         | tokenCmp == EQ = compareTokenValues as bs
         | otherwise = tokenCmp
         where tokenCmp = compare (map typeWeights as) (map typeWeights bs)
-nodeCmp _ _ = GT
 
 instance Ord Node where
     compare :: Node -> Node -> Ordering
@@ -233,11 +230,11 @@ parseStatement :: [Symbol] -> Either String (Node, [Symbol])
 parseStatement (SymDef d:SymSet:xs) = case (parseTest xs) of
     Left err -> Left ("statement -> " ++ err)
     Right (n, (SymComma:xs')) -> Right (Node(TokSet d, [n]), xs')
-    Right _ -> Left $ "declaration of " ++ show d ++ ": expected ';'."
+    Right _ -> Left $ "statement: declaration of " ++ show d ++ ": expected ';'."
 parseStatement sx@(SymDef d:_) = case (parseCall sx) of
     Left err -> Left $ "statement -> " ++ err
     Right (n, (SymComma:xs)) -> Right (n, xs)
-    Right _ -> Left $ "call of " ++ show d ++ ": expected ';'."
+    Right _ -> Left $ "statement: call of " ++ show d ++ ": expected ';'."
 parseStatement xs = parseStatement' xs
 
 
@@ -265,7 +262,7 @@ parseIf (SymKW SkIf:xs) = case (parseParen xs) of
             Left err -> Left err
         Left err -> Left $ "if body -> " ++ err
     Left err -> Left $ "if condition -> " ++ err
-parseIf _ = Left "expected 'If' node."
+parseIf _ = Left "if: expected 'if'."
 
 -- line ::= <ifstat> | <statament>
 parseLine :: [Symbol] -> Either String (Node, [Symbol])
@@ -291,21 +288,23 @@ parseBlock xs = parseLine xs
 parseArgs :: [Symbol] -> Either String (Node, [Symbol])
 parseArgs (SymPar DirOpen:SymPar DirClose:xs) = Right (emptyNode TokArgs, xs)
 parseArgs (SymPar DirOpen:xs) = case (parseTest xs) of
-    Left err -> Left ("arguments -> " ++ err)
-    Right (n, (SymPar DirClose:xs)) -> Right (Node(TokArgs, [n]), xs)
-    Right (n, (SymSep:xs)) -> case (parseArgs xs) of
+    Left err -> Left $ "arguments -> " ++ err
+    Right (n, (SymPar DirClose:xs')) -> Right (Node(TokArgs, [n]), xs')
+    Right (n, (SymSep:xs')) -> case (parseArgs xs') of
         Left err -> Left err
         Right (Node(TokArgs, nx), sx) -> Right (Node(TokArgs, n:nx), sx)
-parseArgs _ = Left "expected open parenthesis."
+        Right _ -> Left "arguments: can't find more aguments to append."
+    Right _ -> Left "arguments: expected ')' or ','."
+parseArgs _ = Left "arguments: expected '('."
 
 -- func ::= func <def> <series> <block>
 parseFunc :: [Symbol] -> Either String (Node, [Symbol])
 parseFunc (SymKW SkFunc:SymDef name:xs) = case (parseArgs xs) of
     Left err -> Left $ "func args -> " ++ err
-    Right (args, xs) -> case (parseBlock xs) of
+    Right (args, xs') -> case (parseBlock xs') of
         Left err -> Left $ "func body -> " ++ err
-        Right (block, xs) -> Right (Node(TokFunction name, [args, block]), xs)
-parseFunc (SymKW SkFunc:xs) = Left "func: expected function name."
+        Right (block, xs'') -> Right (Node(TokFunction name,[args,block]),xs'')
+parseFunc (SymKW SkFunc:_) = Left "func: expected function name."
 parseFunc _ = Left "func: expected a function keyword."
 
 -- startBlock ::= <basic> | <func>
@@ -323,10 +322,10 @@ parseThisPlease' sx nodes = case (parseStartBlock sx) of
 parseThisPlease :: String -> Either String Node
 parseThisPlease s = case (symGetAll s) of
     Right sx -> parseThisPlease' sx []
-    Left err -> Left ("parseThisPlease -> " ++ err)
+    Left err -> Left $ "parseThisPlease -> " ++ err
 
 dispTree :: [Node] -> Int -> IO()
-dispTree [] n = return()
+dispTree [] _ = return()
 dispTree (Node(t, cx):xs) n = (putStrLn $ (replicate n ' ') ++ (show t))
     >> dispTree cx (n + 4) >> dispTree xs n
 
@@ -376,15 +375,18 @@ ctxEmpty = Context{register = 0}
 ctxAdd :: Int -> (Int -> Int)
 ctxAdd n = (\ x -> x + n )
 
+ctxMore :: Context -> Context
+ctxMore ctx = ctxChangeReg ctx succ
+
 asmRemoveFunctions :: Node -> String -> Node
 asmRemoveFunctions (Node(TokFile, xs)) s =
-    let foo = filter (\ n@(Node(TokFunction k, _)) -> s /= k) xs
-    in Node(TokFile, foo)
+    let x = filter (\ (Node(TokFunction k, _)) -> s /= k ) xs
+    in Node(TokFile, x)
 asmRemoveFunctions _ _ = error "expected TokFile node"
 
 asmGetFunctions :: Node -> String -> [Node]
 asmGetFunctions (Node(TokFile, xs)) s =
-    filter (\ n@(Node(TokFunction k, _)) -> s == k) xs
+    filter (\ (Node(TokFunction k, _)) -> s == k) xs
 asmGetFunctions _ _ = error "expected TokFile node"
 
 asmGetSymbols :: [Node] -> [String]
@@ -395,24 +397,25 @@ asmGetSymbols (Node(TokFunction x,_):xs)
     where next = asmGetSymbols xs
 asmGetSymbols (_:xs) = asmGetSymbols xs
 
-asmParseFunction' :: Context -> [Node] -> [ASMAction]
--- asmParseFunction' [] = [CALL ]
-asmParseFunction' ctx [] = []
-asmParseFunction' ctx (x:xs) = [UGET (register nctx) toChange]
+asmParseCall' :: Context -> [Node] -> [ASMAction]
+-- asmParseCall' [] = [CALL ]
+asmParseCall' _ [] = []
+asmParseCall' ctx (_:_) = [UGET (register nctx) toChange]
     where nctx = ctxChangeReg ctx succ
 
-asmParseFunction :: Context -> Node -> [ASMAction]
-asmParseFunction ctx (Node(TokCall f, xs)) =
-    [UGET (register nctx) toChange] ++ asmParseFunction' nctx xs
+asmParseCall :: Context -> Node -> [ASMAction]
+asmParseCall ctx (Node(TokCall _, xs)) =
+    [UGET (register nctx) toChange] ++ asmParseCall' nctx xs
     where nctx = ctxChangeReg ctx succ
+asmParseCall _ _ = []
 
 asmParseBlock :: Context -> Node -> [ASMAction]
-asmParseBlock ctx (Node(TokNum x,[])) = [KSHORT toChange $ round x]
-asmParseBlock ctx (Node(TokReturn,x:xs)) = asmParseBlock ctx x ++ [RET1 toChange 2]
+asmParseBlock ctx (Node(TokNum x,[])) = [KSHORT (register $ ctxMore ctx) (round x)]
+asmParseBlock ctx (Node(TokReturn, x:xs)) = asmParseBlock ctx x ++ [RET1 (register $ ctxMore ctx) 2]
 asmParseBlock ctx (Node(TokBlock, x:xs)) = asmParseBlock ctx x
     where   helper [] = []
             helper (x:xs) = asmParseBlock ctx x ++ helper xs
-asmParseBlock ctx n@(Node(TokCall f, x:xs)) = asmParseFunction ctx n
+asmParseBlock ctx n@(Node(TokCall f, x:xs)) = asmParseCall ctx n
 
 asmPatternMatchingNum :: Context -> Float64 -> [Node] -> [ASMAction]
 asmPatternMatchingNum ctx n (z:[]) =
