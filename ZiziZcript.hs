@@ -341,6 +341,7 @@ data ASMAction =
     | JMP       Word16
     | KSHORT    Word8 Word16
     | KNUM      Word8 Word16
+    | KSTR      Word8 Word16
     | UGET      Word8 Word8
     | GGET      Word8 Word8
     | GSET      Word8 Word8
@@ -357,7 +358,8 @@ data ASMAction =
     deriving(Show, Eq)
 
 data Context = Context {
-        register :: Word8
+        register :: Word8,
+        rgTable :: [(String, Word8)]
     } deriving (Show, Eq)
 
 type FunctionCode = [ASMAction]
@@ -375,7 +377,7 @@ ctxChangeReg :: Context -> (Word8 -> Word8) -> Context
 ctxChangeReg (Context{register = r, ..}) f = Context{register = f r, .. }
 
 ctxEmpty :: Context
-ctxEmpty = Context{register = 0}
+ctxEmpty = Context{register = 0, rgTable = []}
 
 ctxAdd :: Int -> (Int -> Int)
 ctxAdd n = (\ x -> x + n )
@@ -414,37 +416,43 @@ asmGetSymbols (_:xs) = asmGetSymbols xs
 --     where nctx = ctxChangeReg ctx succ
 -- asmParseCall _ _ = []
 
-asmParseCall' :: Context -> [Node] -> (Context, [ASMAction])
-asmParseCall' ctx [] = (ctx, [])
-asmParseCall' ctx ((Node(TokNum n,_)):xs) = (a, [KNUM (register nctx) toChange16] ++ b) where
-    (a, b) = asmParseCall' nctx xs
-    nctx = ctxChangeReg ctx succ
+asmParseNodes :: Context -> [Node] -> (Context, [ASMAction])
+asmParseNodes ctx [] = (ctx, [])
+asmParseNodes ctx (x:xs) = (nctx', actions ++ rest) where
+    (nctx', rest) = asmParseNodes nctx xs
+    (nctx, actions) = asmParseNode ctx x
 
 asmParseCall :: Context -> Node -> (Context, [ASMAction])
 asmParseCall ctx (Node(TokCall f, ns)) = (nctx'', a : actions ++ b) where
-        nctx'' = ctxChangeReg nctx' succ
-        (nctx', actions) = asmParseCall' ctx ns
-        nctx = ctxChangeReg ctx succ
-        a = (UGET (register nctx) toChange)
-        b = [CALL toChange toChange toChange]
+    nctx'' = ctxChangeReg nctx' succ
+    (nctx', actions) = asmParseNodes nctx ns
+    nctx = ctxChangeReg ctx succ
+    a = (UGET (register nctx) toChange)
+    b = [CALL toChange toChange toChange]
 
-asmParseBlock :: Context -> Node -> (Context, [ASMAction])
-asmParseBlock ctx (Node(TokNum x,[])) =
-    (ctx, [KSHORT (register $ ctxMore ctx) (round x)])
-asmParseBlock ctx (Node(TokReturn, x:xs)) =
+-- asmParseOperation :: Context -> SymOperator -> [Node] -> (Context, [ASMAction])
+-- asmParseOperation ctx SoPlus [Node(), b] = 
+
+asmParseNode :: Context -> Node -> (Context, [ASMAction])
+asmParseNode ctx (Node(TokNum x,[])) =
+    (nctx, [KSHORT (register $ nctx) (round x)]) where nctx = ctxMore ctx
+asmParseNode ctx (Node(TokString x,[])) =
+    (nctx, [KSTR (register $ nctx) toChange16]) where nctx = ctxMore ctx
+asmParseNode ctx (Node(TokReturn, x:xs)) =
     (a, b ++ [RET1 (register $ ctxMore ctx) 2])
-    where (a, b) = asmParseBlock ctx x
-asmParseBlock ctx (Node(TokBlock, ns)) = helper ctx ns where 
+    where (a, b) = asmParseNode ctx x
+asmParseNode ctx (Node(TokBlock, ns)) = helper ctx ns where 
     helper ctx [] = (ctx, [])
     helper ctx (x:xs) = (nctx, (b ++ rest)) where
         (nctx', rest) = helper nctx xs
-        (nctx, b) = asmParseBlock ctx x
-asmParseBlock ctx n@(Node(TokCall _,_)) = asmParseCall ctx n
+        (nctx, b) = asmParseNode ctx x
+asmParseNode ctx n@(Node(TokCall _,_)) = asmParseCall ctx n
+-- asmParseNode ctx (Node(TokOpe))
 
 asmPatternMatchingNum :: Context -> Float64 -> [Node] -> (Context, [ASMAction])
 asmPatternMatchingNum ctx n (z:[]) =
     (ctx, [ISNEN 0 $ round n, JMP $ intToWord16 $ succ $ length ys] ++ ys)
-    where (nctx, ys) = asmParseBlock ctx z
+    where (nctx, ys) = asmParseNode ctx z
 
 asmFromSubfunction :: Context -> [Node] -> [Node] -> (Context, [ASMAction])
 asmFromSubfunction ctx (Node(TokNum v,[]):xs) cx = asmPatternMatchingNum ctx v cx
