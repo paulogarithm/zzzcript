@@ -339,7 +339,8 @@ prettyParser s = case (parseThisPlease s) of
 data ASMAction =
       ISNEN     Word8 Word16
     | JMP       Word16
-    | KSHORT    Word8 Word8
+    | KSHORT    Word8 Word16
+    | KNUM      Word8 Word16
     | UGET      Word8 Word8
     | GGET      Word8 Word8
     | GSET      Word8 Word8
@@ -361,7 +362,11 @@ data Context = Context {
 
 type FunctionCode = [ASMAction]
 
+toChange :: Word8
 toChange = 84
+
+toChange16 :: Word16
+toChange16 = 84
 
 intToWord16 :: Int -> Word16
 intToWord16 = fromIntegral
@@ -397,56 +402,77 @@ asmGetSymbols (Node(TokFunction x,_):xs)
     where next = asmGetSymbols xs
 asmGetSymbols (_:xs) = asmGetSymbols xs
 
-asmParseCall' :: Context -> [Node] -> [ASMAction]
--- asmParseCall' [] = [CALL ]
-asmParseCall' _ [] = []
-asmParseCall' ctx (_:_) = [UGET (register nctx) toChange]
-    where nctx = ctxChangeReg ctx succ
+-- asmParseCall' :: Context -> [Node] -> [ASMAction]
+-- -- asmParseCall' [] = [CALL ]
+-- asmParseCall' _ [] = []
+-- asmParseCall' ctx (_:_) = [UGET (register nctx) toChange]
+--     where nctx = ctxChangeReg ctx succ
 
-asmParseCall :: Context -> Node -> [ASMAction]
-asmParseCall ctx (Node(TokCall _, xs)) =
-    [UGET (register nctx) toChange] ++ asmParseCall' nctx xs
-    where nctx = ctxChangeReg ctx succ
-asmParseCall _ _ = []
+-- asmParseCall :: Context -> Node -> [ASMAction]
+-- asmParseCall ctx (Node(TokCall _, xs)) =
+--     [UGET (register nctx) toChange] ++ asmParseCall' nctx xs
+--     where nctx = ctxChangeReg ctx succ
+-- asmParseCall _ _ = []
 
-asmParseBlock :: Context -> Node -> [ASMAction]
-asmParseBlock ctx (Node(TokNum x,[])) = [KSHORT (register $ ctxMore ctx) (round x)]
-asmParseBlock ctx (Node(TokReturn, x:xs)) = asmParseBlock ctx x ++ [RET1 (register $ ctxMore ctx) 2]
-asmParseBlock ctx (Node(TokBlock, x:xs)) = asmParseBlock ctx x
-    where   helper [] = []
-            helper (x:xs) = asmParseBlock ctx x ++ helper xs
-asmParseBlock ctx n@(Node(TokCall f, x:xs)) = asmParseCall ctx n
+asmParseCall' :: Context -> [Node] -> (Context, [ASMAction])
+asmParseCall' ctx [] = (ctx, [])
+asmParseCall' ctx ((Node(TokNum n,_)):xs) = (a, [KNUM (register nctx) toChange16] ++ b) where
+    (a, b) = asmParseCall' nctx xs
+    nctx = ctxChangeReg ctx succ
 
-asmPatternMatchingNum :: Context -> Float64 -> [Node] -> [ASMAction]
+asmParseCall :: Context -> Node -> (Context, [ASMAction])
+asmParseCall ctx (Node(TokCall f, ns)) = (nctx'', a : actions ++ b) where
+        nctx'' = ctxChangeReg nctx' succ
+        (nctx', actions) = asmParseCall' ctx ns
+        nctx = ctxChangeReg ctx succ
+        a = (UGET (register nctx) toChange)
+        b = [CALL toChange toChange toChange]
+
+asmParseBlock :: Context -> Node -> (Context, [ASMAction])
+asmParseBlock ctx (Node(TokNum x,[])) =
+    (ctx, [KSHORT (register $ ctxMore ctx) (round x)])
+asmParseBlock ctx (Node(TokReturn, x:xs)) =
+    (a, b ++ [RET1 (register $ ctxMore ctx) 2])
+    where (a, b) = asmParseBlock ctx x
+asmParseBlock ctx (Node(TokBlock, ns)) = helper ctx ns where 
+    helper ctx [] = (ctx, [])
+    helper ctx (x:xs) = (nctx, (b ++ rest)) where
+        (nctx', rest) = helper nctx xs
+        (nctx, b) = asmParseBlock ctx x
+asmParseBlock ctx n@(Node(TokCall _,_)) = asmParseCall ctx n
+
+asmPatternMatchingNum :: Context -> Float64 -> [Node] -> (Context, [ASMAction])
 asmPatternMatchingNum ctx n (z:[]) =
-    [ISNEN 0 $ round n, JMP $ intToWord16 $ succ $ length ys] ++ ys
-    where ys = asmParseBlock ctx z
+    (ctx, [ISNEN 0 $ round n, JMP $ intToWord16 $ succ $ length ys] ++ ys)
+    where (nctx, ys) = asmParseBlock ctx z
 
-asmFromSubfunction :: Context -> [Node] -> [Node] -> [ASMAction]
+asmFromSubfunction :: Context -> [Node] -> [Node] -> (Context, [ASMAction])
 asmFromSubfunction ctx (Node(TokNum v,[]):xs) cx = asmPatternMatchingNum ctx v cx
-asmFromSubfunction _ (Node(TokDef v,[]):xs) cx = [IDK]
-asmFromSubfunction _ _ _ = [IDK]
+asmFromSubfunction ctx (Node(TokDef v,[]):xs) cx = (ctx, [IDK, IDK])
+asmFromSubfunction ctx _ _ = (ctx, [IDK])
 
 asmUnpackFunction :: Node -> ([Node], [Node])
 asmUnpackFunction (Node(TokFunction _,(Node(TokArgs,as):bs))) = (as, bs)
 
-asmFromFunction' :: Context -> [Node] -> [ASMAction]
-asmFromFunction' _ [] = []
-asmFromFunction' ctx (x:xs) = (asmFromSubfunction ctx a b) ++ next
-    where   next = asmFromFunction' ctx xs
+asmFromFunction' :: Context -> [Node] -> (Context, [ASMAction])
+asmFromFunction' ctx [] = (ctx, [])
+asmFromFunction' ctx (x:xs) = (nctx', rest ++ next)
+    where   (nctx', rest) = (asmFromSubfunction nctx a b)
+            (nctx, next) = asmFromFunction' ctx xs
             (a, b) = asmUnpackFunction x
 
-asmFromFunction :: Context -> [Node] -> FunctionCode
+asmFromFunction :: Context -> [Node] -> (Context, [ASMAction])
 asmFromFunction ctx fx = asmFromFunction' ctx $ sort fx
 
-ast2LuassemblyJit' :: Context -> Node -> [String] -> [FunctionCode]
-ast2LuassemblyJit' _ _ [] = []
-ast2LuassemblyJit' ctx n (x:xs) = (asmFromFunction ctx $ asmGetFunctions n x) : next
-    where next = ast2LuassemblyJit' ctx n xs
+ast2LuassemblyJit' :: Context -> Node -> [String] -> (Context, [FunctionCode])
+ast2LuassemblyJit' ctx _ [] = (ctx, [])
+ast2LuassemblyJit' ctx n (x:xs) = (nctx', rest : next)
+    where   (nctx', next) = ast2LuassemblyJit' nctx n xs
+            (nctx, rest) = (asmFromFunction ctx $ asmGetFunctions n x)
 
 ast2LuassemblyJit :: Node -> [FunctionCode]
-ast2LuassemblyJit node@(Node(TokFile, xs)) =
-    ast2LuassemblyJit' ctxEmpty node (asmGetSymbols xs)
+ast2LuassemblyJit node@(Node(TokFile, xs)) = b
+    where (a, b) = ast2LuassemblyJit' ctxEmpty node (asmGetSymbols xs)
 
 prettyAsm :: String -> IO()
 prettyAsm s = case (parseThisPlease s) of

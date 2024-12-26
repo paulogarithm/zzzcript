@@ -48,7 +48,7 @@ TokFile
 
 ---
 
--- BYTECODE -- factorial.lua:1-9
+-- BYTECODE -- a.lua:1-9
 0001    ISNEN    0   0      ; 0
 0002    JMP      1 => 0005
 0003    KSHORT   1   1
@@ -58,21 +58,20 @@ TokFile
 0007    KSHORT   1   1
 0008    RET1     1   2
 0009 => UGET     1   0      ; fact
-0010    SUBVN    2   0   1  ; 1
+0010    SUBVN    3   0   1  ; 1
 0011    CALL     1   2   2
 0012    MULVV    1   0   1
 0013    RET1     1   2
 
--- BYTECODE -- factorial.lua:0-11
-0001    FNEW     0   0      ; factorial.lua:1
+-- BYTECODE -- a.lua:0-11
+0001    FNEW     0   0      ; a.lua:1
 0002    GGET     1   1      ; "print"
-0003    MOV      2   0
-0004    KSHORT   3   5
-0005    CALL     2   0   2
+0003    MOV      3   0
+0004    KSHORT   5   4
+0005    CALL     3   0   2
 0006    CALLM    1   1   0
 0007    UCLO     0 => 0008
 0008 => RET0     0   1
-
 ---
 
 -- BYTECODE -- file.factorial.lua:1-9               |   [0] = n
