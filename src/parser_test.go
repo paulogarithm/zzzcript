@@ -211,7 +211,6 @@ func TestParseUnary(t *testing.T) {
 func TestParsePairFromLeaf(t *testing.T) {
 	n := nodeFactory[tokProcedure]("prout")
 	n.makeMeta()
-
 	xs, err := Lex("1 + 1")
 	if err != nil {
 		t.Fatal(err)
@@ -220,6 +219,8 @@ func TestParsePairFromLeaf(t *testing.T) {
 		t.Fatal("expected to work")
 	}
 
+	n = nodeFactory[tokProcedure]("prout")
+	n.makeMeta()
 	xs, err = Lex("1 < 1")
 	if err != nil {
 		t.Fatal(err)
@@ -227,4 +228,29 @@ func TestParsePairFromLeaf(t *testing.T) {
 	if !n.parseLeaf(&xs) {
 		t.Fatal("expected to work")
 	}
+
+	n = nodeFactory[tokProcedure]("prout")
+	n.makeMeta()
+	xs, err = Lex("1 + 2 + 3")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !n.parseLeaf(&xs) {
+		t.Fatal("expected to work")
+	}
+}
+
+func TestParseFunc(t *testing.T) {
+	n := nodeFactory[tokProcedure]("prout")
+	n.makeMeta()
+
+	xs, err := Lex("func foo(<3, hello, 42) 0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	DisplaySymbols(xs)
+	if !n.parseFunction(&xs) {
+		t.Fatal("expected to work")
+	}
+	println(n.String())
 }

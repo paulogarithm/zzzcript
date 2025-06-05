@@ -23,20 +23,20 @@ type operatorType uint
 
 const (
 	opePlus   operatorType = iota // +
-	opeMinus                       // -
-	opeMul                         // *
-	opeDiv                         // /
-	opeShl                         // <<
-	opeShr                         // >>
-	opeBitAnd                      // &
-	opeBitOr                       // |
-	opeBitXor                      // ^
-	opeBitNot                      // ~
-	opeAnd                         // &&
-	opeOr                          // ||
+	opeMinus                      // -
+	opeMul                        // *
+	opeDiv                        // /
+	opeShl                        // <<
+	opeShr                        // >>
+	opeBitAnd                     // &
+	opeBitOr                      // |
+	opeBitXor                     // ^
+	opeBitNot                     // ~
+	opeAnd                        // &&
+	opeOr                         // ||
 )
 
-var sym2ope = map[symbolType]operatorType{
+var convSym2ope = map[symbolType]operatorType{
 	symPlus:  opePlus,
 	symMinus: opeMinus,
 	symMul:   opeMul,
@@ -66,7 +66,7 @@ var opePrio = map[operatorType]uint{
 	opeOr:     0,
 }
 
-var opeUnaries = map[operatorType]void{
+var setOfOpeUnaries = map[operatorType]void{
 	opeMinus:  void{},
 	opeBitNot: void{},
 }
@@ -85,7 +85,7 @@ const (
 	testNot                  // !
 )
 
-var sym2test = map[symbolType]testType{
+var convSym2test = map[symbolType]testType{
 	symIsDiff:  testDiff,
 	symIsEqual: testEq,
 	symLT:      testLt,
@@ -105,7 +105,7 @@ var testPrio = map[testType]uint{
 	testNot:  2,
 }
 
-var testUnaries = map[testType]void{
+var setOfTestUnaries = map[testType]void{
 	testNot: void{},
 }
 
@@ -148,7 +148,7 @@ const (
 	tokSet                        // when a variable is set
 	tokIf                         // an if block (first object is condition, second is statement, third is else)
 	tokCall                       // a function call (print())
-	tokOperator                  // when an operation is made (1 + 1)
+	tokOperator                   // when an operation is made (1 + 1)
 	tokTest                       // when a test is made (3 < 3)
 	tokDef                        // a definition (hello)
 	tokType                       // a type (true),
@@ -161,45 +161,45 @@ const (
 
 // check for a no arg token
 var convTok2Str = map[tokenType]string{
-	tokIf: "if",
-	tokBlock: "block",
+	tokIf:     "if",
+	tokBlock:  "block",
 	tokReturn: "return",
-	tokArgs: "args",
+	tokArgs:   "args",
 }
 
 // check for a token that holds a string
 var convStrtok2Str = map[tokenType]string{
-	tokFunction: "function",
+	tokFunction:  "function",
 	tokProcedure: "procedure",
-	tokImport: "import",
-	tokSet: "set",
-	tokCall: "call",
-	tokDef: "defined",
+	tokImport:    "import",
+	tokSet:       "set",
+	tokCall:      "call",
+	tokDef:       "defined",
 }
 
 var convOperator2Str = map[operatorType]string{
 	opeBitAnd: "band",
-	opeBitOr: "box",
+	opeBitOr:  "box",
 	opeBitNot: "bnot",
-	opeDiv: "div",
+	opeDiv:    "div",
 	opeBitXor: "bxor",
-	opeMinus: "minus",
-	opeMul: "mul",
-	opePlus: "plus",
-	opeShl: "shl",
-	opeShr: "shr",
-	opeAnd: "and",
-	opeOr: "or",
+	opeMinus:  "minus",
+	opeMul:    "mul",
+	opePlus:   "plus",
+	opeShl:    "shl",
+	opeShr:    "shr",
+	opeAnd:    "and",
+	opeOr:     "or",
 }
 
 var convTest2Str = map[testType]string{
 	testDiff: "diff",
-	testEq: "eq",
-	testGt: "gt",
-	testGte: "gte",
-	testLt: "lt",
-	testLte: "lte",
-	testNot: "not",
+	testEq:   "eq",
+	testGt:   "gt",
+	testGte:  "gte",
+	testLt:   "lt",
+	testLte:  "lte",
+	testNot:  "not",
 }
 
 type Token interface {
@@ -644,11 +644,6 @@ func (p *Node) parseTerm(xs SymbolsPtr) bool {
 	return true
 }
 
-// testsym ::= <lt> | <gt> | <gte> | <lte> | <eq> | <diff>
-func (p *Node) parseTestsym(xs SymbolsPtr) bool {
-	return false
-}
-
 // unary ::= <test|operation> <leaf>
 func (p *Node) parseUnary(xs SymbolsPtr) bool {
 	if len(*xs) < 2 {
@@ -656,8 +651,8 @@ func (p *Node) parseUnary(xs SymbolsPtr) bool {
 	}
 
 	// check for operation
-	if operator, ok := sym2ope[(*xs)[0].GetType()]; ok {
-		if _, ok := opeUnaries[operator]; !ok {
+	if operator, ok := convSym2ope[(*xs)[0].GetType()]; ok {
+		if _, ok := setOfOpeUnaries[operator]; !ok {
 			return false // not a unary operator
 		}
 		forward(xs, 1)
@@ -667,8 +662,8 @@ func (p *Node) parseUnary(xs SymbolsPtr) bool {
 		return true
 
 		// check for test
-	} else if test, ok := sym2test[(*xs)[0].GetType()]; ok {
-		if _, ok := testUnaries[test]; !ok {
+	} else if test, ok := convSym2test[(*xs)[0].GetType()]; ok {
+		if _, ok := setOfTestUnaries[test]; !ok {
 			return false // not a unary test
 		}
 		forward(xs, 1)
@@ -693,9 +688,9 @@ func (p *Node) parsePair(xs SymbolsPtr) bool {
 
 	// then create the real child and copy the first child of dummy in real
 	var child *Node
-	if o, ok := sym2ope[(*xs)[0].GetType()]; ok {
+	if o, ok := convSym2ope[(*xs)[0].GetType()]; ok {
 		child = nodeFactory[tokOperator](o)
-	} else if t, ok := sym2test[(*xs)[0].GetType()]; ok {
+	} else if t, ok := convSym2test[(*xs)[0].GetType()]; ok {
 		child = nodeFactory[tokTest](t)
 	} else {
 		return false // not an operator or test
@@ -719,11 +714,6 @@ func (p *Node) parseLeaf(xs SymbolsPtr) bool {
 	return true
 }
 
-// arg ::= <def> | <testsym> <value>
-func (p *Node) parseArg(xs SymbolsPtr) bool {
-	return false
-}
-
 // expr ::= <call> | <set> | <return>
 func (p *Node) parseExpr(xs SymbolsPtr) bool {
 	return false
@@ -731,7 +721,29 @@ func (p *Node) parseExpr(xs SymbolsPtr) bool {
 
 // block ::= <expr> | { [<expr>] }
 func (p *Node) parseBlock(xs SymbolsPtr) bool {
-	return false
+	return p.parseLeaf(xs) // for now...
+}
+
+// arg ::= < <value> | <testsym> <value !def> >
+func (p *Node) parseArg(xs SymbolsPtr) bool {
+	// check if its a test sym
+	test, ok := convSym2test[(*xs)[0].GetType()]
+	if ok {
+		forward(xs, 1)
+		testNode := nodeFactory[tokTest](test)
+		if (*xs)[0].GetType() == symDef {
+			return false // definition not accepted when pattern matching test
+		}
+		if !testNode.parseValue(xs) {
+			return false // could not parse value
+		}
+		p.append(testNode)
+
+		// or check if it's a value
+	} else if !p.parseValue(xs) {
+		return false
+	}
+	return true
 }
 
 // function ::= func <def> ( [<arg> ,] ) <block>
@@ -742,6 +754,37 @@ func (p *Node) parseFunction(xs SymbolsPtr) bool {
 	if (*xs)[0].GetType() != symKWFunc || (*xs)[1].GetType() != symDef || (*xs)[2].GetType() != symParOpen {
 		return false
 	}
+
+	// create the function node
+	defName, ok := (*xs)[1].(strSymbol)
+	if !ok {
+		return false // def is not a string
+	}
+	funcNode := nodeFactory[tokFunction](defName.Content)
+	forward(xs, 3)
+
+	// parse the args
+	args := nodeFactory[tokArgs]()
+	for (*xs)[0].GetType() != symParClose {
+		if !args.parseArg(xs) {
+			return false
+		}
+		if (*xs)[0].GetType() == symParClose {
+			break
+		}
+		if (*xs)[0].GetType() != symComma {
+			return false // expected comma or end parenthesis
+		}
+		forward(xs, 1)
+ 	}
+	forward(xs, 1)
+	funcNode.append(args)
+
+	// then parse block
+	if !funcNode.parseBlock(xs) {
+		return false
+	}
+	p.append(funcNode)
 	return true
 }
 
