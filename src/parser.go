@@ -17,12 +17,12 @@ func forward(xs SymbolsPtr, off uint) bool {
 	return true
 }
 
-// Operation
+// operator
 
-type operationType uint
+type operatorType uint
 
 const (
-	opePlus   operationType = iota // +
+	opePlus   operatorType = iota // +
 	opeMinus                       // -
 	opeMul                         // *
 	opeDiv                         // /
@@ -36,7 +36,7 @@ const (
 	opeOr                          // ||
 )
 
-var sym2ope = map[symbolType]operationType{
+var sym2ope = map[symbolType]operatorType{
 	symPlus:  opePlus,
 	symMinus: opeMinus,
 	symMul:   opeMul,
@@ -51,7 +51,7 @@ var sym2ope = map[symbolType]operationType{
 	symOr:    opeOr,
 }
 
-var opePrio = map[operationType]uint{
+var opePrio = map[operatorType]uint{
 	opeBitNot: 11,
 	opeDiv:    10,
 	opeMul:    10,
@@ -66,12 +66,12 @@ var opePrio = map[operationType]uint{
 	opeOr:     0,
 }
 
-var opeUnaries = map[operationType]void{
+var opeUnaries = map[operatorType]void{
 	opeMinus:  void{},
 	opeBitNot: void{},
 }
 
-// Test
+// test
 
 type testType uint
 
@@ -122,7 +122,7 @@ const (
 	typUserdata                // an userdata
 )
 
-var typ2str = map[typType]string{
+var convType2Str = map[typType]string{
 	typNull:     "null",
 	typInt:      "int",
 	typNumber:   "number",
@@ -135,6 +135,7 @@ var typ2str = map[typType]string{
 
 // tokens
 
+// the enum token type
 type tokenType uint
 
 const (
@@ -147,7 +148,7 @@ const (
 	tokSet                        // when a variable is set
 	tokIf                         // an if block (first object is condition, second is statement, third is else)
 	tokCall                       // a function call (print())
-	tokOperation                  // when an operation is made (1 + 1)
+	tokOperator                  // when an operation is made (1 + 1)
 	tokTest                       // when a test is made (3 < 3)
 	tokDef                        // a definition (hello)
 	tokType                       // a type (true),
@@ -157,6 +158,49 @@ const (
 	tokBoolean                    // a boolean
 	tokList                       // a list
 )
+
+// check for a no arg token
+var convTok2Str = map[tokenType]string{
+	tokIf: "if",
+	tokBlock: "block",
+	tokReturn: "return",
+	tokArgs: "args",
+}
+
+// check for a token that holds a string
+var convStrtok2Str = map[tokenType]string{
+	tokFunction: "function",
+	tokProcedure: "procedure",
+	tokImport: "import",
+	tokSet: "set",
+	tokCall: "call",
+	tokDef: "defined",
+}
+
+var convOperator2Str = map[operatorType]string{
+	opeBitAnd: "band",
+	opeBitOr: "box",
+	opeBitNot: "bnot",
+	opeDiv: "div",
+	opeBitXor: "bxor",
+	opeMinus: "minus",
+	opeMul: "mul",
+	opePlus: "plus",
+	opeShl: "shl",
+	opeShr: "shr",
+	opeAnd: "and",
+	opeOr: "or",
+}
+
+var convTest2Str = map[testType]string{
+	testDiff: "diff",
+	testEq: "eq",
+	testGt: "gt",
+	testGte: "gte",
+	testLt: "lt",
+	testLte: "lte",
+	testNot: "not",
+}
 
 type Token interface {
 	GetToken() tokenType
@@ -173,53 +217,19 @@ func (s *basicToken) GetToken() tokenType {
 	return s.tok
 }
 func (s *basicToken) String() string {
-	switch s.tok {
-	case tokIf:
-		return "if"
-	case tokBlock:
-		return "block"
-	case tokReturn:
-		return "return"
-	case tokArgs:
-		return "args"
+	if n, ok := convTok2Str[s.tok]; ok {
+		return n
 	}
 	return "undefined"
 }
 
 type opeToken struct {
 	basicToken
-	Operation operationType
+	Operator operatorType
 }
 
 func (s *opeToken) String() string {
-	str := "operation <"
-	switch s.Operation {
-	case opeBitAnd:
-		str += "band"
-	case opeBitOr:
-		str += "box"
-	case opeBitNot:
-		str += "bnot"
-	case opeDiv:
-		str += "div"
-	case opeBitXor:
-		str += "bxor"
-	case opeMinus:
-		str += "minus"
-	case opeMul:
-		str += "mul"
-	case opePlus:
-		str += "plus"
-	case opeShl:
-		str += "shl"
-	case opeShr:
-		str += "shr"
-	case opeAnd:
-		str += "and"
-	case opeOr:
-		str += "or"
-	}
-	return str + ">"
+	return "operator <" + convOperator2Str[s.Operator] + ">"
 }
 
 type testToken struct {
@@ -228,24 +238,7 @@ type testToken struct {
 }
 
 func (s *testToken) String() string {
-	str := "test <"
-	switch s.Test {
-	case testDiff:
-		str += "diff"
-	case testEq:
-		str += "eq"
-	case testGt:
-		str += "gt"
-	case testGte:
-		str += "gte"
-	case testLt:
-		str += "lt"
-	case testLte:
-		str += "lte"
-	case testNot:
-		str += "not"
-	}
-	return str + ">"
+	return "test <" + convTest2Str[s.Test] + ">"
 }
 
 type intToken struct {
@@ -263,21 +256,8 @@ type strToken struct {
 }
 
 func (s *strToken) String() string {
-	var what string
-	switch s.tok {
-	case tokFunction:
-		what = "function"
-	case tokProcedure:
-		what = "procedure"
-	case tokImport:
-		what = "import"
-	case tokSet:
-		what = "set"
-	case tokCall:
-		what = "call"
-	case tokDef:
-		what = "defined"
-	default:
+	what, ok := convStrtok2Str[s.tok]
+	if !ok {
 		what = "string"
 	}
 	return what + " <" + s.Data + ">"
@@ -307,7 +287,7 @@ type typToken struct {
 }
 
 func (s *typToken) String() string {
-	return "type <" + typ2str[s.Type] + ">"
+	return "type <" + convType2Str[s.Type] + ">"
 }
 
 type typStructToken struct {
@@ -376,8 +356,8 @@ var nodeFactory = map[tokenType]func(...any) *Node{
 	tokString:    strTokenCallback(tokString),
 
 	// the weirdos
-	tokOperation: func(arg ...any) *Node {
-		return newNode(&opeToken{basicToken{tokBoolean}, arg[0].(operationType)})
+	tokOperator: func(arg ...any) *Node {
+		return newNode(&opeToken{basicToken{tokBoolean}, arg[0].(operatorType)})
 	},
 	tokTest: func(arg ...any) *Node {
 		return newNode(&testToken{basicToken{tokBoolean}, arg[0].(testType)})
@@ -432,7 +412,7 @@ func (n *Node) showMetadata() string {
 			if k != 0 {
 				buf += ", "
 			}
-			buf += typ2str[v]
+			buf += convType2Str[v]
 		}
 		buf += ")"
 		if len(data.Out) != 0 {
@@ -441,7 +421,7 @@ func (n *Node) showMetadata() string {
 				if k != 0 {
 					buf += ", "
 				}
-				buf += typ2str[v]
+				buf += convType2Str[v]
 			}
 		}
 		buf += "\n"
@@ -676,12 +656,12 @@ func (p *Node) parseUnary(xs SymbolsPtr) bool {
 	}
 
 	// check for operation
-	if operation, ok := sym2ope[(*xs)[0].GetType()]; ok {
-		if _, ok := opeUnaries[operation]; !ok {
+	if operator, ok := sym2ope[(*xs)[0].GetType()]; ok {
+		if _, ok := opeUnaries[operator]; !ok {
 			return false // not a unary operator
 		}
 		forward(xs, 1)
-		child := nodeFactory[tokOperation](operation)
+		child := nodeFactory[tokOperator](operator)
 		child.parseLeaf(xs)
 		p.append(child)
 		return true
@@ -714,11 +694,11 @@ func (p *Node) parsePair(xs SymbolsPtr) bool {
 	// then create the real child and copy the first child of dummy in real
 	var child *Node
 	if o, ok := sym2ope[(*xs)[0].GetType()]; ok {
-		child = nodeFactory[tokOperation](o)
+		child = nodeFactory[tokOperator](o)
 	} else if t, ok := sym2test[(*xs)[0].GetType()]; ok {
 		child = nodeFactory[tokTest](t)
 	} else {
-		return false // not an operation or test
+		return false // not an operator or test
 	}
 	forward(xs, 1)
 	child.Children = append(child.Children, dummy.Children[0])
