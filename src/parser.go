@@ -603,7 +603,7 @@ func (p *Node) parseValue(xs SymbolsPtr) bool {
 	return true
 }
 
-// call ::= <def> ( [<term> ,] )
+// call ::= <def> ( [<leaf> ,] )
 func (p *Node) parseCall(xs SymbolsPtr) bool {
 	xsl := uint(len(*xs))
 	if xsl < 3 {
@@ -613,6 +613,7 @@ func (p *Node) parseCall(xs SymbolsPtr) bool {
 		return false // expected def or '('.
 	}
 
+	
 	callFunction, ok := (*xs)[0].(strSymbol)
 	if !ok {
 		return false // couldnt parse strSymbol from definition
@@ -623,11 +624,19 @@ func (p *Node) parseCall(xs SymbolsPtr) bool {
 		if uint(len(*xs)) < 2 {
 			return false
 		}
-		if !child.parseTerm(xs) {
+		if !child.parseLeaf(xs) {
 			return false // could not parse node
 		}
-		// ICI faut finir paul
+		if (*xs)[0].GetType() == symParClose {
+			break
+		}
+		if (*xs)[0].GetType() != symComma {
+			return false
+		}
+		forward(xs, 1)
 	}
+	forward(xs, 1)
+	p.append(child)
 	return true
 }
 
@@ -680,10 +689,17 @@ func (p *Node) parsePair(xs SymbolsPtr) bool {
 	if len(*xs) < 3 {
 		return false // not enough symbols
 	}
+
 	// create a dummy node to parse the first term (auto forward)
+	sav := make([]Symbol, len(*xs))
+	copy(sav, *xs)
 	dummy := nodeFactory[tokProcedure]("")
 	if !dummy.parseTerm(xs) {
 		return false // could not parse term in the first operand
+	}
+	if len(*xs) < 2 {
+		*xs = sav
+		return false
 	}
 
 	// then create the real child and copy the first child of dummy in real
@@ -693,6 +709,7 @@ func (p *Node) parsePair(xs SymbolsPtr) bool {
 	} else if t, ok := convSym2test[(*xs)[0].GetType()]; ok {
 		child = nodeFactory[tokTest](t)
 	} else {
+		*xs = sav
 		return false // not an operator or test
 	}
 	forward(xs, 1)
@@ -700,6 +717,7 @@ func (p *Node) parsePair(xs SymbolsPtr) bool {
 
 	// then parse the second child
 	if !child.parseLeaf(xs) {
+		*xs = sav
 		return false // could not parse the second operand
 	}
 	p.append(child)
@@ -714,7 +732,7 @@ func (p *Node) parseLeaf(xs SymbolsPtr) bool {
 	return true
 }
 
-// expr ::= <call> | <set> | <return>
+// expr ::= <call> | <set> | <return> | <if>
 func (p *Node) parseExpr(xs SymbolsPtr) bool {
 	return false
 }

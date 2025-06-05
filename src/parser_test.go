@@ -248,8 +248,39 @@ func TestParseFunc(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	DisplaySymbols(xs)
 	if !n.parseFunction(&xs) {
+		t.Fatal("expected to work")
+	}
+}
+
+func TestParseCall(t *testing.T) {
+	n := nodeFactory[tokProcedure]("prout")
+	n.makeMeta()
+
+	// regular
+	xs, err := Lex("hello()")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !n.parseLeaf(&xs) {
+		t.Fatal("expected to work")
+	}
+
+	// some arguments
+	xs, err = Lex("hello(1, 2, 3)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !n.parseLeaf(&xs) {
+		t.Fatal("expected to work")
+	}
+
+	// call in call
+	xs, err = Lex("hello(foo(1), bar(2, baz()), 3)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !n.parseLeaf(&xs) {
 		t.Fatal("expected to work")
 	}
 	println(n.String())
