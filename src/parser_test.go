@@ -327,5 +327,5 @@ func TestParseFactorialFullCode(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	println(n.String())
+	_=n
 }

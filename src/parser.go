@@ -109,10 +109,11 @@ var setOfTestUnaries = map[testType]void{
 	testNot: void{},
 }
 
-type typType uint
+// the type of a zzz value
+type zzzType uint
 
 const (
-	typNull     typType = iota // null type
+	typNull     zzzType = iota // null type
 	typInt                     // an int (3)
 	typNumber                  // a number (3.14)
 	typString                  // a string ("hello")
@@ -122,7 +123,7 @@ const (
 	typUserdata                // an userdata
 )
 
-var convType2Str = map[typType]string{
+var convType2Str = map[zzzType]string{
 	typNull:     "null",
 	typInt:      "int",
 	typNumber:   "number",
@@ -157,6 +158,7 @@ const (
 	tokInt                        // an int
 	tokBoolean                    // a boolean
 	tokList                       // a list
+	tokNull                       // null
 )
 
 // check for a no arg token
@@ -185,7 +187,7 @@ var convOperator2Str = map[operatorType]string{
 	opeBitXor: "bxor",
 	opeMinus:  "minus",
 	opeMul:    "mul",
-	opePlus:   "plus",
+	opePlus:   "add",
 	opeShl:    "shl",
 	opeShr:    "shr",
 	opeAnd:    "and",
@@ -283,7 +285,7 @@ func (s *numberToken) String() string {
 
 type typToken struct {
 	basicToken
-	Type typType
+	Type zzzType
 }
 
 func (s *typToken) String() string {
@@ -302,8 +304,8 @@ func (s *typStructToken) String() string {
 // node type & functions for nodes
 
 type functionMeta struct {
-	In  []typType
-	Out []typType
+	In  []zzzType
+	Out []zzzType
 }
 
 type MetaData struct {
@@ -345,6 +347,7 @@ var nodeFactory = map[tokenType]func(...any) *Node{
 	tokArgs:   basictokenCallback(tokArgs),
 	tokReturn: basictokenCallback(tokReturn),
 	tokIf:     basictokenCallback(tokIf),
+	tokNull:   basictokenCallback(tokNull),
 
 	// the ones who need a string
 	tokProcedure: strTokenCallback(tokProcedure),
@@ -372,7 +375,7 @@ var nodeFactory = map[tokenType]func(...any) *Node{
 		return newNode(&intToken{basicToken{tokInt}, arg[0].(int64)})
 	},
 	tokType: func(arg ...any) *Node {
-		sk := arg[0].(typType)
+		sk := arg[0].(zzzType)
 		if sk == typStruct && len(arg) == 2 {
 			return newNode(&typStructToken{typToken{basicToken{tokType}, sk}, arg[1].(string)})
 		}
@@ -432,8 +435,8 @@ func (n *Node) showMetadata() string {
 // parser
 
 // type ::= int | number | boolean | string
-func parseType(xs SymbolsPtr) (typType, bool) {
-	var typ typType
+func parseType(xs SymbolsPtr) (zzzType, bool) {
+	var typ zzzType
 	switch (*xs)[0].GetType() {
 	case symTBool:
 		typ = typBoolean
@@ -471,7 +474,7 @@ func (p *Node) parseFuncType(xs SymbolsPtr) bool {
 	var (
 		fmeta = functionMeta{}
 		ok    bool
-		t     typType
+		t     zzzType
 	)
 	if (*xs)[0].GetType() == symParClose {
 		goto checkRet
@@ -582,7 +585,7 @@ func (p *Node) parseImport(sx SymbolsPtr) bool {
 	return forward(sx, inIndex+3)
 }
 
-// value ::= <def> | <number> | <int> | <string>
+// value ::= <def> | <number> | <int> | <string> | <null>
 func (p *Node) parseValue(xs SymbolsPtr) bool {
 	val := (*xs)[0]
 	switch val.GetType() {
@@ -596,6 +599,8 @@ func (p *Node) parseValue(xs SymbolsPtr) bool {
 		p.append(nodeFactory[tokString](val.(strSymbol).Content))
 	case symKWTrue, symKWFalse:
 		p.append(nodeFactory[tokBoolean](val.GetType() == symKWTrue))
+	case symKWNull:
+		p.append(nodeFactory[tokNull]())
 	default:
 		return false // not a valid value
 	}
@@ -613,7 +618,6 @@ func (p *Node) parseCall(xs SymbolsPtr) bool {
 		return false // expected def or '('.
 	}
 
-	
 	callFunction, ok := (*xs)[0].(strSymbol)
 	if !ok {
 		return false // couldnt parse strSymbol from definition
@@ -748,7 +752,7 @@ func (p *Node) parseReturn(xs SymbolsPtr) bool {
 
 // expr ::= <leaf> ; | <set> ; | <return> ; | <if>
 func (p *Node) parseExpr(xs SymbolsPtr) bool {
-	if p.parseReturn(xs) {
+	if p.parseReturn(xs) || p.parseLeaf(xs) {
 		if len(*xs) == 0 || (*xs)[0].GetType() != symSemicolon {
 			return false // missing semicolon
 		}
@@ -833,7 +837,7 @@ func (p *Node) parseFunction(xs SymbolsPtr) bool {
 			return false // expected comma or end parenthesis
 		}
 		forward(xs, 1)
- 	}
+	}
 	forward(xs, 1)
 	funcNode.append(args)
 
