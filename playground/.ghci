@@ -1,7 +1,0 @@
-import Foreign.Ptr (castPtr)
-import Foreign.Storable (Storable, poke, peek)
-import Foreign.Marshal.Alloc (alloca)
-alloca (\ptr -> poke (castPtr ptr) (3 :: Float) >> peek ptr) :: IO Int
--- 1077936128
-alloca (\ptr -> poke (castPtr ptr) (3 :: Float) >> peek ptr) :: IO Float
--- 3.0

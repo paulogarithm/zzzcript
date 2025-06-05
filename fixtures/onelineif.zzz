@@ -1,0 +1,3 @@
+import print, userInput in io;
+
+func main() if (accepted) print("you are accepted") else print("you cant pass") where age = userInput("Enter your age: "), accepted = age >= 18;

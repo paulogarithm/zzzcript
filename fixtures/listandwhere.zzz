@@ -1,0 +1,7 @@
+import print in io;
+
+func main() {
+    where a = {1, 2, 3};
+    print(3 in a);
+    print(n * n) where n = 3;
+}

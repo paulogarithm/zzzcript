@@ -1,0 +1,13 @@
+import print in io;
+
+basically struct Foo -> {
+    number a,
+    number b,
+};
+
+basically hello(Foo) -> number;
+func hello(x) return x.a + x.b;
+
+func main() {
+    print(hello(Foo{3, 4}));
+}

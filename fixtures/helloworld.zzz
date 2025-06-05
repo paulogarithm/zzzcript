@@ -1,0 +1,2 @@
+import print in io;
+func main() print("hello world !");

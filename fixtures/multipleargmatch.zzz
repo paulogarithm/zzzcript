@@ -1,0 +1,11 @@
+import print in io;
+
+basically foo(int, int) -> int;
+func foo(a, 4) return a;
+func foo(1, 2) return 9999;
+func foo(a, b) return a + b;
+func foo(_, _) return 0;
+
+func main() {
+    print(foo(1, 4));
+}

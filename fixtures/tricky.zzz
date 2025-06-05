@@ -1,0 +1,21 @@
+import print in io;
+
+func main() print(3 < 5 == true && false || true);
+
+// should be true
+
+procedure <file>:
+    import <io>:
+        defined <print>
+    function <main>:
+        args:
+        call:
+            test <or>:
+                test <and>:
+                    test <eq>:
+                        operation <lt>:
+                            int <3>
+                            int <5>
+                        bool <true>
+                    bool <false>
+                bool <true>

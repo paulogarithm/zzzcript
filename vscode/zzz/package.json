@@ -1,0 +1,25 @@
+{
+  "name": "zzz",
+  "displayName": "ZZZcript",
+  "description": "The ZZZ linter",
+  "version": "0.0.6",
+  "engines": {
+    "vscode": "^1.100.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [{
+      "id": "zzz",
+      "aliases": ["ZZZ", "zzz"],
+      "extensions": [".zzz",".zizi"],
+      "configuration": "./language-configuration.json"
+    }],
+    "grammars": [{
+      "language": "zzz",
+      "scopeName": "source.zzz",
+      "path": "./syntaxes/zzz.tmLanguage.json"
+    }]
+  }
+}

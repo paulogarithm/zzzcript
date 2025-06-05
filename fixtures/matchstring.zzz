@@ -1,0 +1,15 @@
+import print in io
+
+basically matching(string) -> string;
+func matching("hello") return "what"
+func matching("hello":rest) return rest
+func matching('h':rest) return matching(rest)
+func matching("") return "none"
+func matching(_) return "unknown"
+
+func main() {
+    print(matching("hello world")); world
+    print(matching("hello")); what
+    print(matching("hhello")); what
+    print(matching("hhh")); none
+}

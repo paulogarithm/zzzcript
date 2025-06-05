@@ -1,0 +1,155 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "ZZZ",
+  "scopeName": "source.zzz",
+  "patterns": [
+    {
+      "include": "#keywords"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#numbers"
+    },
+    {
+      "include": "#operators"
+    },
+    {
+      "include": "#types"
+    },
+    {
+      "include": "#constants"
+    },
+    {
+      "include": "#func-call"
+    },
+    {
+      "include": "#func-def"
+    },
+    {
+      "include": "#builtins"
+    },
+    {
+      "include": "#import-in"
+    }
+  ],
+  "repository": {
+    "import-in": {
+      "patterns": [
+        {
+          "name": "keyword.control.import.zzz",
+          "match": "\\bimport\\b"
+        },
+        {
+          "name": "variable.other.imported.zzz",
+          "match": "(?<=\\bimport\\s)\\w+"
+        },
+        {
+          "name": "keyword.control.in.zzz",
+          "match": "\\bin\\b"
+        },
+        {
+          "name": "entity.name.type.zzz",
+          "match": "(?<=\\bin\\s)\\w+"
+        }
+      ]
+    },
+    "func-def": {
+      "patterns": [
+        {
+          "name": "keyword.control.func.zzz",
+          "match": "\\bfunc\\b"
+        },
+        {
+          "name": "entity.name.function.definition.zzz",
+          "match": "(?<=\\bfunc\\s)\\w+"
+        }
+      ]
+    },
+    "basically": {
+      "patterns": [
+        {
+          "name": "keyword.control.basically.zzz",
+          "match": "\\bbasically\\b"
+        },
+        {
+          "name": "entity.name.type.zzz",
+          "match": "\\b(?!struct\\b)\\w+",
+          "captures": {
+            "0": {
+              "name": "entity.name.type.zzz"
+            }
+          }
+        }
+      ]
+    },
+    "builtins": {
+      "patterns": [
+        {
+          "name": "entity.name.function.builtin.zzz",
+          "match": "\\b(map|print|userInput|reduce|filter)\\b"
+        }
+      ]
+    },
+    "func-call": {
+      "patterns": [
+        {
+          "name": "entity.name.function.call.zzz",
+          "match": "\\b\\w+(?=\\()"
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.zzz",
+          "match": "\\b(import|in|if|else|return|struct|func|basically|where|and|not|or)\\b"
+        }
+      ]
+    },
+    "constants": {
+      "patterns": [
+        {
+          "name": "constant.language.zzz",
+          "match": "\\b(true|false|null)\\b"
+        }
+      ]
+    },
+    "types": {
+      "patterns": [
+        {
+          "name": "storage.type.zzz",
+          "match": "\\b(int|number|string|bool)\\b"
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.zzz",
+          "match": "\\b\\d+(\\.\\d+)?\\b"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.zzz",
+          "match": "[+\\-*/%=&|<>!^~]+"
+        }
+      ]
+    },
+    "strings": {
+      "name": "string.quoted.double.zzz",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "name": "constant.character.escape.zzz",
+          "match": "\\\\."
+        }
+      ]
+    }
+  }
+}

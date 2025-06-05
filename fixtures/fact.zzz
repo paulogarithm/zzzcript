@@ -1,0 +1,40 @@
+import print in io;
+
+basically fact(int) -> int;
+func fact(<=1) return 1;
+func fact(n) return fact(n - 1) * n;
+
+func main() {
+    print(fact(5) == 120);
+}
+
+// in AST //
+
+procedure <file>:
+    import <io>:
+        defined <print>
+    function <fact>:
+        args:
+            test <lte>:
+                int <1>
+        return:
+            int <1>
+    function <fact>:
+        args:
+            defined <n>
+        return:
+            operation <mul>
+                call <fact>:
+                    operation <minus>:
+                        defined <n>
+                        int <1>
+                defined <n>
+    function <main>:
+        args:
+        block:
+            call <print>:
+                test <eq>:
+                    call <fact>:
+                        int <5>
+                    int <120>
+

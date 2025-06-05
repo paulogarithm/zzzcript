@@ -1,0 +1,37 @@
+/// code
+
+import map, filter, reduce in array;
+import even in compare;
+import print in io;
+
+func main() print(reduce(filter(map(t, +1), even), *)) where t = {1, 2, 3};
+
+/// output
+
+8
+
+/// ast
+
+procedure <file>
+    import <array>
+        defined <map>
+        defined <filter>
+        defined <reduce>
+    import <compare>
+        defined <even>
+    import <io>
+        defined <print>
+    function <main>
+        args
+        call <print>
+            call <reduce>
+                call <filter>
+                    call <map>
+                        defined <t>
+                        operation <plus>
+                            int <1>
+                    defined <even>
+                operation <mul>
+            set
+                defined <t>
+                list <
