@@ -244,7 +244,7 @@ func TestParseFunc(t *testing.T) {
 	n := nodeFactory[tokProcedure]("prout")
 	n.makeMeta()
 
-	xs, err := Lex("func foo(<3, hello, 42) 0")
+	xs, err := Lex("func foo(<3, hello, 42) return 1;")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -282,6 +282,50 @@ func TestParseCall(t *testing.T) {
 	}
 	if !n.parseLeaf(&xs) {
 		t.Fatal("expected to work")
+	}
+}
+
+func TestParseReturn(t *testing.T) {
+	n := nodeFactory[tokProcedure]("prout")
+	n.makeMeta()
+
+	// regular
+	xs, err := Lex("return 3")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !n.parseReturn(&xs) {
+		t.Fatal("expected to work")
+	}
+
+	// return expression
+	xs, err = Lex("return 1 + 1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !n.parseReturn(&xs) {
+		t.Fatal("expected to work")
+	}
+
+	// return expression 2
+	xs, err = Lex("return not 1 * ~3")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !n.parseReturn(&xs) {
+		t.Fatal("expected to work")
+	}
+}
+
+func TestParseFactorialFullCode(t *testing.T) {
+	// regular
+	xs, err := Lex("import print in io; basically fact(int) -> int; func fact(<=1) return 1; func fact(n) return fact(n-1) * n;")
+	if err != nil {
+		t.Fatal(err)
+	}
+	n, err := Parse(xs)
+	if err != nil {
+		t.Fatal(err)
 	}
 	println(n.String())
 }

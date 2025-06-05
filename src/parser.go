@@ -1,7 +1,7 @@
 package zzz
 
 import (
-	"fmt"
+	"errors"
 	"strconv"
 	"strings"
 )
@@ -579,7 +579,7 @@ func (p *Node) parseImport(sx SymbolsPtr) bool {
 		node.append(v)
 	}
 	p.append(node)
-	return forward(sx, inIndex+1)
+	return forward(sx, inIndex+3)
 }
 
 // value ::= <def> | <number> | <int> | <string>
@@ -732,14 +732,53 @@ func (p *Node) parseLeaf(xs SymbolsPtr) bool {
 	return true
 }
 
-// expr ::= <call> | <set> | <return> | <if>
+// return ::= return <leaf>
+func (p *Node) parseReturn(xs SymbolsPtr) bool {
+	if (*xs)[0].GetType() != symKWReturn {
+		return false
+	}
+	forward(xs, 1)
+	node := nodeFactory[tokReturn]()
+	if !node.parseLeaf(xs) {
+		return false
+	}
+	p.append(node)
+	return true
+}
+
+// expr ::= <leaf> ; | <set> ; | <return> ; | <if>
 func (p *Node) parseExpr(xs SymbolsPtr) bool {
+	if p.parseReturn(xs) {
+		if len(*xs) == 0 || (*xs)[0].GetType() != symSemicolon {
+			return false // missing semicolon
+		}
+		forward(xs, 1)
+		return true
+	}
 	return false
 }
 
 // block ::= <expr> | { [<expr>] }
 func (p *Node) parseBlock(xs SymbolsPtr) bool {
-	return p.parseLeaf(xs) // for now...
+	if (*xs)[0].GetType() == symCurlyOpen {
+		block := nodeFactory[tokBlock]()
+		forward(xs, 1)
+		if len(*xs) == 0 {
+			return false // expected at least '}'
+		}
+		for (*xs)[0].GetType() != symCurlyClose {
+			if !block.parseExpr(xs) {
+				return false
+			}
+			if len(*xs) == 0 {
+				return false // expected end of block '}'
+			}
+		}
+		forward(xs, 1)
+		p.append(block)
+		return true
+	}
+	return p.parseExpr(xs)
 }
 
 // arg ::= < <value> | <testsym> <value !def> >
@@ -825,7 +864,10 @@ func Parse(symbols []Symbol) (*Node, error) {
 	node := nodeFactory[tokProcedure]("filename")
 	node.makeMeta()
 
-	fmt.Println(node.parseAction(&symbols))
-	// fmt.Println(node.parseAction(&symbols))
+	for len(symbols) > 0 {
+		if !node.parseAction(&symbols) {
+			return nil, errors.New("invalid")
+		}
+	}
 	return node, nil
 }
