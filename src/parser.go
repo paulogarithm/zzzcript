@@ -360,10 +360,10 @@ var nodeFactory = map[tokenType]func(...any) *Node{
 
 	// the weirdos
 	tokOperator: func(arg ...any) *Node {
-		return newNode(&opeToken{basicToken{tokBoolean}, arg[0].(operatorType)})
+		return newNode(&opeToken{basicToken{tokOperator}, arg[0].(operatorType)})
 	},
 	tokTest: func(arg ...any) *Node {
-		return newNode(&testToken{basicToken{tokBoolean}, arg[0].(testType)})
+		return newNode(&testToken{basicToken{tokTest}, arg[0].(testType)})
 	},
 	tokBoolean: func(arg ...any) *Node {
 		return newNode(&boolToken{basicToken{tokBoolean}, arg[0].(bool)})
@@ -717,7 +717,7 @@ func (p *Node) parsePair(xs SymbolsPtr) bool {
 		return false // not an operator or test
 	}
 	forward(xs, 1)
-	child.Children = append(child.Children, dummy.Children[0])
+	child.append(dummy.Children[0])
 
 	// then parse the second child
 	if !child.parseLeaf(xs) {
@@ -736,15 +736,15 @@ func (p *Node) parseLeaf(xs SymbolsPtr) bool {
 	return true
 }
 
-// return ::= return <leaf>
+// return ::= return <leaf> | return
 func (p *Node) parseReturn(xs SymbolsPtr) bool {
 	if (*xs)[0].GetType() != symKWReturn {
 		return false
 	}
 	forward(xs, 1)
 	node := nodeFactory[tokReturn]()
-	if !node.parseLeaf(xs) {
-		return false
+	if !node.parseLeaf(xs) && (*xs)[0].GetType() != symSemicolon {
+		return true
 	}
 	p.append(node)
 	return true
@@ -809,7 +809,7 @@ func (p *Node) parseArg(xs SymbolsPtr) bool {
 
 // function ::= func <def> ( [<arg> ,] ) <block>
 func (p *Node) parseFunction(xs SymbolsPtr) bool {
-	if len(*xs) < 6 { // smallest is "func a ( ) { }" which is 6
+	if len(*xs) < 6 { // smallest is "func a ( ) return ;" or "func a ( ) { }" which is 6
 		return false
 	}
 	if (*xs)[0].GetType() != symKWFunc || (*xs)[1].GetType() != symDef || (*xs)[2].GetType() != symParOpen {

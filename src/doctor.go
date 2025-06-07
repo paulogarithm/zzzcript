@@ -5,6 +5,8 @@ import (
 	"fmt"
 )
 
+// convert a token into a type (if applicable)
+// int -> typInt
 var convTok2Typ = map[tokenType]zzzType{
 	tokInt: typInt,
 	tokNumber: typNumber,
@@ -53,13 +55,102 @@ func canIAutoCastThisShit(from, desired zzzType) zzzType {
 	return from
 }
 
-func checkThisReturnType(retType zzzType, ret *Node) error {
-	return nil
+// get the final type of node
+func getFinalNodeType(defmap map[string]zzzType, node *Node, meta *MetaData) (zzzType, error) {
+	// TODO: implement the where thingy
+	token := node.tok.GetToken()
+	switch token {
+		// check if it's the return node
+	case tokReturn:
+		if len(node.Children) == 0 {
+			return typNull, nil
+		}
+		return getFinalNodeType(defmap, node.Children[0], meta)
+
+		// check type when it's a lvalue
+	case tokInt, tokNumber, tokString, tokBoolean, tokList, tokNull:
+		t, ok := convTok2Typ[token]
+		if !ok {
+			return typInt, fmt.Errorf("could not convert type")
+		}
+		return t, nil
+	
+		// check when it's a variable/def
+	case tokDef:
+		def, ok := node.tok.(*strToken)
+		if !ok {
+			return typInt, fmt.Errorf("could not convert call to strToken (should never happend)")
+		}
+		if x, ok := defmap[def.Data]; !ok {
+			return typInt, fmt.Errorf("variable not parsed")
+		} else {
+			return x, nil
+		}
+
+		// check type when it's call
+	case tokCall:
+		def, ok := node.tok.(*strToken)
+		if !ok {
+			return typInt, fmt.Errorf("could not convert call to strToken (should never happend)")
+		}
+		meta, ok := meta.FunctionMeta[def.Data]
+		if !ok {
+			return typInt, fmt.Errorf("function does not exist (missing basically maybe)")
+		}
+		if len(meta.Out) == 0 {
+			return typNull, nil
+		}
+		return meta.Out[0], nil
+	
+		// check when it's an operator (+, -, >>, ...)
+	case tokOperator:
+		ope, ok := node.tok.(*opeToken)
+		if !ok {
+			return typInt, fmt.Errorf("could not convert call to opeToken (should never happend)")
+		}
+		if len(node.Children) < 2 {
+			return typInt, fmt.Errorf("expected at least 2 children in operator")
+		}
+		if ope.Operator == opeOr || ope.Operator == opeAnd {
+			return typBoolean, nil
+		}
+		a, err := getFinalNodeType(defmap, node.Children[0], meta)
+		if err != nil {
+			return a, err
+		}
+		b, err := getFinalNodeType(defmap, node.Children[1], meta)
+		if err != nil {
+			return b, err
+		}
+		res, isOK := checkTypeIntegrity(a, b)
+		if !isOK {
+			return res, fmt.Errorf("invalid operation between incompatible types: %s with %s", convType2Str[a], convType2Str[b])
+		}
+		return res, nil
+
+		// check test (<, !, ==, ...)
+	case tokTest:
+		return typBoolean, nil
+	}
+	return typInt, fmt.Errorf("invalid node type here")
 }
 
-func trackAndCheckReturn(retType zzzType, node *Node) error {
+func trackAndCheckReturn(retType zzzType, defmap map[string]zzzType, node *Node, meta *MetaData) error {
 	if node.tok.GetToken() == tokReturn {
-		println("CHECKING")
+		t, err := getFinalNodeType(defmap, node, meta)
+		if err != nil {
+			return err
+		}
+		t = canIAutoCastThisShit(t, retType)
+		if t != retType {
+			return fmt.Errorf("type mismatch: you return a %s, but your function expects a %s", convType2Str[t], convType2Str[retType])
+		}
+		return nil
+	}
+	for _, node := range node.Children {
+		if err := trackAndCheckReturn(retType, defmap, node, meta); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -79,10 +170,11 @@ func checkIfYourFunctionIsFineOrShit(f *Node) error {
 	}
 
 	// parse the types of variables
+	meta := functionMeta{In: []zzzType{}, Out: []zzzType{}}
 	defTypes := map[string]zzzType{}
 	if fname.Data != "main" {
 		// check coherence arguments
-		meta, ok := f.meta.FunctionMeta[fname.Data]
+		meta, ok = f.meta.FunctionMeta[fname.Data]
 		if !ok {
 			return errors.New("missing basically for your function " + fname.Data)
 		}
@@ -97,8 +189,10 @@ func checkIfYourFunctionIsFineOrShit(f *Node) error {
 		}
 	}
 
-	t, ok := defTypes["n"]
-	println(t == typInt, ok)
+	// if there is an output, check for the return
+	if len(meta.Out) != 0 {
+		return trackAndCheckReturn(meta.Out[0], defTypes, f, f.meta)
+	}
 	return nil
 }
 
