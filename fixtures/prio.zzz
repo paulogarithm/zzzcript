@@ -1,0 +1,11 @@
+basically foo() -> int; func foo() return 3 * 2 + 1;
+
+procedure:
+    function <foo>:
+        args
+        return:
+            operator <add>:
+                operator <mul>:
+                    int <2>
+                    int <3>
+                int <1>

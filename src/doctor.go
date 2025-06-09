@@ -55,6 +55,30 @@ func canIAutoCastThisShit(from, desired zzzType) zzzType {
 	return from
 }
 
+// check the arguments of function integrity
+func checkFunctionParams(defmap map[string]zzzType, fmeta functionMeta, node *Node, meta *MetaData) error {
+	// check for function arguments
+	realLen := len(fmeta.In)
+	for realLen >= 1 && fmeta.In[realLen - 1] == typNull {
+		realLen--
+	}
+	if len(node.Children) != realLen {
+		return fmt.Errorf("too few arguments in function call")
+	}
+
+	// check argument types
+	for n := range realLen {
+		t, err := getFinalNodeType(defmap, node.Children[n], meta)
+		if err != nil {
+			return err
+		}
+		if canIAutoCastThisShit(t, fmeta.In[n]) != fmeta.In[n] {
+			return fmt.Errorf("invalid type at the argument %d: expected '%s', got '%s'", n + 1, convType2Str[fmeta.In[n]], convType2Str[t])
+		}
+	}
+	return nil
+}
+
 // get the final type of node
 func getFinalNodeType(defmap map[string]zzzType, node *Node, meta *MetaData) (zzzType, error) {
 	// TODO: implement the where thingy
@@ -93,14 +117,17 @@ func getFinalNodeType(defmap map[string]zzzType, node *Node, meta *MetaData) (zz
 		if !ok {
 			return typInt, fmt.Errorf("could not convert call to strToken (should never happend)")
 		}
-		meta, ok := meta.FunctionMeta[def.Data]
+		fmeta, ok := meta.FunctionMeta[def.Data]
 		if !ok {
 			return typInt, fmt.Errorf("function does not exist (missing basically maybe)")
 		}
-		if len(meta.Out) == 0 {
+		if err := checkFunctionParams(defmap, fmeta, node, meta); err != nil {
+			return typInt, err
+		}
+		if len(fmeta.Out) == 0 {
 			return typNull, nil
 		}
-		return meta.Out[0], nil
+		return fmeta.Out[0], nil
 	
 		// check when it's an operator (+, -, >>, ...)
 	case tokOperator:
@@ -179,7 +206,7 @@ func checkIfYourFunctionIsFineOrShit(f *Node) error {
 			return errors.New("missing basically for your function " + fname.Data)
 		}
 		if len(args.Children) != len(meta.In) {
-			return fmt.Errorf("%s expects %d arguments, but %d are given", fname.Data, len(meta.In), len(args.Children))
+			return fmt.Errorf("function %s expects %d arguments, but %d are given", fname.Data, len(meta.In), len(args.Children))
 		}
 		for index, arg := range args.Children {
 			if arg.tok.GetToken() != tokDef {

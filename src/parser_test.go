@@ -329,3 +329,15 @@ func TestParseFactorialFullCode(t *testing.T) {
 	}
 	_=n
 }
+
+func TestParsePrio(t *testing.T) {
+	xs, err := Lex("basically foo() -> int; func foo() return 3 * 2 + 1;")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ast, err := Parse(xs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	println(ast.String())
+}

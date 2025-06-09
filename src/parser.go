@@ -646,7 +646,17 @@ func (p *Node) parseCall(xs SymbolsPtr) bool {
 
 // parenexpr ::= ( <leaf> )
 func (p *Node) parseParenExpr(xs SymbolsPtr) bool {
-	return false
+	if (*xs)[0].GetType() != symParOpen {
+		return false
+	}
+	forward(xs, 1)
+	if !p.parseLeaf(xs) {
+		return false
+	}
+	if (*xs)[0].GetType() != symParClose {
+		return false
+	}
+	return forward(xs, 1)
 }
 
 // term ::= <value> | <call> | <parenexpr>

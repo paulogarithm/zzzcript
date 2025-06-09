@@ -133,4 +133,34 @@ func TestDoctorFactorial(t *testing.T) {
 		t.Fatal("doctor should fail")
 	}
 	println(err.Error())
+
+	// should fail
+	xs, err = Lex("basically bar(int); func bar() return;")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ast, err = Parse(xs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = Doctor(ast)
+	if err == nil {
+		t.Fatal("doctor should fail")
+	}
+	println(err.Error())
+
+	// should fail
+	xs, err = Lex("basically foo(int) -> int; func foo(0) return 0; func foo(n) return foo(\"hello\");")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ast, err = Parse(xs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = Doctor(ast)
+	if err == nil {
+		t.Fatal("doctor should fail")
+	}
+	println(err.Error())
 }
