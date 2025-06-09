@@ -8,12 +8,12 @@ import (
 // convert a token into a type (if applicable)
 // int -> typInt
 var convTok2Typ = map[tokenType]zzzType{
-	tokInt: typInt,
-	tokNumber: typNumber,
-	tokString: typString,
+	tokInt:     typInt,
+	tokNumber:  typNumber,
+	tokString:  typString,
 	tokBoolean: typBoolean,
-	tokList: typList,
-	tokNull: typNull,
+	tokList:    typList,
+	tokNull:    typNull,
 }
 
 func specialTypeResult(a, b zzzType) (zzzType, bool) {
@@ -57,9 +57,14 @@ func canIAutoCastThisShit(from, desired zzzType) zzzType {
 
 // check the arguments of function integrity
 func checkFunctionParams(defmap map[string]zzzType, fmeta functionMeta, node *Node, meta *MetaData) error {
+	// check for builtin that doesnt care
+	if fmeta.doesntCareEntry && fmeta.isBuiltin {
+		return nil
+	}
+
 	// check for function arguments
 	realLen := len(fmeta.In)
-	for realLen >= 1 && fmeta.In[realLen - 1] == typNull {
+	for realLen >= 1 && fmeta.In[realLen-1] == typNull {
 		realLen--
 	}
 	if len(node.Children) != realLen {
@@ -73,7 +78,7 @@ func checkFunctionParams(defmap map[string]zzzType, fmeta functionMeta, node *No
 			return err
 		}
 		if canIAutoCastThisShit(t, fmeta.In[n]) != fmeta.In[n] {
-			return fmt.Errorf("invalid type at the argument %d: expected '%s', got '%s'", n + 1, convType2Str[fmeta.In[n]], convType2Str[t])
+			return fmt.Errorf("invalid type at the argument %d: expected '%s', got '%s'", n+1, convType2Str[fmeta.In[n]], convType2Str[t])
 		}
 	}
 	return nil
@@ -82,9 +87,9 @@ func checkFunctionParams(defmap map[string]zzzType, fmeta functionMeta, node *No
 // get the final type of node
 func getFinalNodeType(defmap map[string]zzzType, node *Node, meta *MetaData) (zzzType, error) {
 	// TODO: implement the where thingy
-	token := node.tok.GetToken()
+	token := node.tok.GetTokenType()
 	switch token {
-		// check if it's the return node
+	// check if it's the return node
 	case tokReturn:
 		if len(node.Children) == 0 {
 			return typNull, nil
@@ -98,7 +103,7 @@ func getFinalNodeType(defmap map[string]zzzType, node *Node, meta *MetaData) (zz
 			return typInt, fmt.Errorf("could not convert type")
 		}
 		return t, nil
-	
+
 		// check when it's a variable/def
 	case tokDef:
 		def, ok := node.tok.(*strToken)
@@ -128,7 +133,7 @@ func getFinalNodeType(defmap map[string]zzzType, node *Node, meta *MetaData) (zz
 			return typNull, nil
 		}
 		return fmeta.Out[0], nil
-	
+
 		// check when it's an operator (+, -, >>, ...)
 	case tokOperator:
 		ope, ok := node.tok.(*opeToken)
@@ -163,7 +168,7 @@ func getFinalNodeType(defmap map[string]zzzType, node *Node, meta *MetaData) (zz
 }
 
 func trackAndCheckReturn(retType zzzType, defmap map[string]zzzType, node *Node, meta *MetaData) error {
-	if node.tok.GetToken() == tokReturn {
+	if node.tok.GetTokenType() == tokReturn {
 		t, err := getFinalNodeType(defmap, node, meta)
 		if err != nil {
 			return err
@@ -188,7 +193,7 @@ func checkIfYourFunctionIsFineOrShit(f *Node) error {
 		return errors.New("too few children in the call")
 	}
 	args := f.Children[0]
-	if args.tok.GetToken() != tokArgs {
+	if args.tok.GetTokenType() != tokArgs {
 		return errors.New("expected call first child to be a token")
 	}
 	fname, ok := f.tok.(*strToken)
@@ -209,7 +214,7 @@ func checkIfYourFunctionIsFineOrShit(f *Node) error {
 			return fmt.Errorf("function %s expects %d arguments, but %d are given", fname.Data, len(meta.In), len(args.Children))
 		}
 		for index, arg := range args.Children {
-			if arg.tok.GetToken() != tokDef {
+			if arg.tok.GetTokenType() != tokDef {
 				continue
 			}
 			defTypes[arg.tok.(*strToken).Data] = meta.In[index]
@@ -225,7 +230,7 @@ func checkIfYourFunctionIsFineOrShit(f *Node) error {
 
 func Doctor(ast *Node) error {
 	for _, child := range ast.Children {
-		if child.tok.GetToken() == tokFunction {
+		if child.tok.GetTokenType() == tokFunction {
 			err := checkIfYourFunctionIsFineOrShit(child)
 			if err != nil {
 				return err

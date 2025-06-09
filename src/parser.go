@@ -10,11 +10,20 @@ import (
 
 type void struct{}
 
+type zzzInt int64
+type zzzNumber float64
+
 type SymbolsPtr *[]Symbol
 
 func forward(xs SymbolsPtr, off uint) bool {
 	*xs = (*xs)[off:]
 	return true
+}
+
+var builtinDefs = map[string]map[string]functionMeta{
+	"io": {
+		"print": {doesntCareEntry: true, Out: []zzzType{}},
+	},
 }
 
 // operator
@@ -200,7 +209,7 @@ var convTest2Str = map[testType]string{
 }
 
 type Token interface {
-	GetToken() tokenType
+	GetTokenType() tokenType
 	String() string
 }
 
@@ -210,7 +219,7 @@ type basicToken struct {
 	tok tokenType
 }
 
-func (s *basicToken) GetToken() tokenType {
+func (s *basicToken) GetTokenType() tokenType {
 	return s.tok
 }
 func (s *basicToken) String() string {
@@ -240,7 +249,7 @@ func (s *testToken) String() string {
 
 type intToken struct {
 	basicToken
-	Data int64
+	Data zzzInt
 }
 
 func (s *intToken) String() string {
@@ -271,11 +280,11 @@ func (s *boolToken) String() string {
 
 type numberToken struct {
 	basicToken
-	Data float64
+	Data zzzNumber
 }
 
 func (s *numberToken) String() string {
-	return "number <" + strconv.FormatFloat(s.Data, 'f', -1, 64) + ">"
+	return "number <" + strconv.FormatFloat(float64(s.Data), 'f', -1, 64) + ">"
 }
 
 type typToken struct {
@@ -299,8 +308,11 @@ func (s *typStructToken) String() string {
 // node type & functions for nodes
 
 type functionMeta struct {
-	In  []zzzType
-	Out []zzzType
+	In              []zzzType
+	Out             []zzzType
+	doesntCareEntry bool
+	isBuiltin       bool
+	holder          *Node
 }
 
 type MetaData struct {
@@ -364,10 +376,10 @@ var nodeFactory = map[tokenType]func(...any) *Node{
 		return newNode(&boolToken{basicToken{tokBoolean}, arg[0].(bool)})
 	},
 	tokNumber: func(arg ...any) *Node {
-		return newNode(&numberToken{basicToken{tokNumber}, arg[0].(float64)})
+		return newNode(&numberToken{basicToken{tokNumber}, arg[0].(zzzNumber)})
 	},
 	tokInt: func(arg ...any) *Node {
-		return newNode(&intToken{basicToken{tokInt}, arg[0].(int64)})
+		return newNode(&intToken{basicToken{tokInt}, arg[0].(zzzInt)})
 	},
 	tokType: func(arg ...any) *Node {
 		sk := arg[0].(zzzType)
@@ -434,11 +446,15 @@ func (n *Node) showMetadata() string {
 	var buf string
 	for def, data := range n.meta.FunctionMeta {
 		buf += def + "("
-		for k, v := range data.In {
-			if k != 0 {
-				buf += ", "
+		if data.doesntCareEntry && data.isBuiltin {
+			buf += "..."
+		} else {
+			for k, v := range data.In {
+				if k != 0 {
+					buf += ", "
+				}
+				buf += convType2Str[v]
 			}
-			buf += convType2Str[v]
 		}
 		buf += ")"
 		if len(data.Out) != 0 {
@@ -450,7 +466,7 @@ func (n *Node) showMetadata() string {
 				buf += convType2Str[v]
 			}
 		}
-		buf += "\n"
+		buf += ";\n"
 	}
 	return buf
 }
@@ -551,6 +567,10 @@ func (p *Node) parseBasically(xs SymbolsPtr) bool {
 }
 
 // import ::= import <def> [, <def>]? in (<def> | <string>) ;
+//
+// TODO: change this to use forward() maybe.
+//
+// TODO: for non stdlibs (for strings) check the path
 func (p *Node) parseImport(sx SymbolsPtr) bool {
 	// check for the requierments
 	sxl := uint(len(*sx))
@@ -565,6 +585,8 @@ func (p *Node) parseImport(sx SymbolsPtr) bool {
 		(*sx)[1].GetType() != symDef {
 		return false
 	}
+
+	// check first node
 	x, ok := (*sx)[1].(strSymbol)
 	if !ok {
 		return false
@@ -583,7 +605,7 @@ func (p *Node) parseImport(sx SymbolsPtr) bool {
 		inIndex += 2
 	}
 
-	// check for where it is
+	// check for the lib
 	if (*sx)[inIndex].GetType() != symKWIn {
 		return false
 	}
@@ -591,15 +613,22 @@ func (p *Node) parseImport(sx SymbolsPtr) bool {
 	if actualSym != symString && actualSym != symDef {
 		return false
 	}
-	x, ok = (*sx)[inIndex+1].(strSymbol)
+	libName, ok := (*sx)[inIndex+1].(strSymbol)
 	if !ok {
 		return false
 	}
-	node := nodeFactory[tokImport](x.Content)
+	libNode := nodeFactory[tokImport](libName.Content)
 	for _, v := range list {
-		node.append(v)
+		bName := v.tok.(*strToken).Data
+		bDef, ok := builtinDefs[libName.Content][bName]
+		if ok {
+			bDef.isBuiltin = true
+			bDef.holder = libNode
+			p.meta.FunctionMeta[bName] = bDef
+		}
+		libNode.append(v)
 	}
-	p.append(node)
+	p.append(libNode)
 	return forward(sx, inIndex+3)
 }
 
@@ -767,9 +796,8 @@ func (p *Node) parsePair(xs SymbolsPtr) bool {
 	}
 
 	// priority testing
-	println("->   node:", child.tok.String(), prio)
-	println(">  parent:", p.tok.String(), parentPrio)
-
+	// println("->   node:", child.tok.String(), prio)
+	// println(">  parent:", p.tok.String(), parentPrio)
 	if parentPrio != -1 && prio < uint(parentPrio) {
 		y := child.pop(nil)
 		x := p.parent.swapChild(p, child)

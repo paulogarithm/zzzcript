@@ -216,11 +216,11 @@ func (t strSymbol) String() string {
 
 type numSymbol struct {
 	simpleSymbol
-	Content float64
+	Content zzzNumber
 }
 
 func (t numSymbol) String() string {
-	return "NUMBER(" + strconv.FormatFloat(t.Content, 'f', -1, 64) + ")"
+	return "NUMBER(" + strconv.FormatFloat(float64(t.Content), 'f', -1, 64) + ")"
 }
 
 // int Symbol
@@ -229,11 +229,11 @@ func (t numSymbol) String() string {
 
 type intSymbol struct {
 	simpleSymbol
-	Content int64
+	Content zzzInt
 }
 
 func (t intSymbol) String() string {
-	return "INT(" + strconv.FormatInt(t.Content, 10) + ")"
+	return "INT(" + strconv.FormatInt(int64(t.Content), 10) + ")"
 }
 
 func DisplaySymbols(xs []Symbol) {
@@ -252,13 +252,13 @@ func getSymbolToAppend(isNum, isFlt, isStr bool, buf string) (Symbol, error) {
 		if err != nil {
 			return t, err
 		}
-		t = numSymbol{simpleSymbol{symNumber}, n}
+		t = numSymbol{simpleSymbol{symNumber}, zzzNumber(n)}
 	case isNum && !isFlt:
 		n, err := strconv.ParseInt(buf, 10, 64)
 		if err != nil {
 			return t, err
 		}
-		t = intSymbol{simpleSymbol{symInt}, n}
+		t = intSymbol{simpleSymbol{symInt}, zzzInt(n)}
 	case isStr:
 		t = strSymbol{simpleSymbol{symString}, buf}
 	default:

@@ -50,19 +50,23 @@ func main() {
 	// 	}
 	// `)
 
-	xs, err := zzz.Lex(`
-		import print in io;
+	// xs, err := zzz.Lex(`
+	// 	import print in io;
 
-		func main() print("hello");
-	`)
+	// 	func main() print("hello");
+	// `)
 
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+	// zzz.DisplaySymbols(xs)
+	// ast, err := zzz.Parse(xs)
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+	// fmt.Println(ast)
+	err := zzz.Run("import print in io; basically succ(int) -> int; func succ(n) return n +1; func main() { print(succ(42)); }")
 	if err != nil {
 		log.Fatal(err)
 	}
-	zzz.DisplaySymbols(xs)
-	ast, err := zzz.Parse(xs)
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Println(ast)
 }
