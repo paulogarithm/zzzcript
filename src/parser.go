@@ -66,10 +66,7 @@ var opePrio = map[operatorType]uint{
 	opeOr:     0,
 }
 
-var setOfOpeUnaries = map[operatorType]void{
-	opeMinus:  void{},
-	opeBitNot: void{},
-}
+var setOfOpeUnaries = map[operatorType]void{opeMinus: {}, opeBitNot: {}}
 
 // test
 
@@ -105,9 +102,7 @@ var testPrio = map[testType]uint{
 	testNot:  2,
 }
 
-var setOfTestUnaries = map[testType]void{
-	testNot: void{},
-}
+var setOfTestUnaries = map[testType]void{testNot: {}}
 
 // the type of a zzz value
 type zzzType uint
@@ -383,6 +378,34 @@ var nodeFactory = map[tokenType]func(...any) *Node{
 	},
 }
 
+func (p *Node) swapChild(from *Node, to *Node) *Node {
+	for k, child := range p.Children {
+		if child == from {
+			p.Children[k] = to
+			return from
+		}
+	}
+	return nil
+}
+
+func (f *Node) pop(what *Node) *Node {
+	if what == nil {
+		if len(f.Children) == 0 {
+			return nil
+		}
+		first := f.Children[0]
+		f.Children = f.Children[1:]
+		return first
+	}
+	for i, child := range f.Children {
+		if child == what {
+			f.Children = append(f.Children[:i], f.Children[i+1:]...)
+			return child
+		}
+	}
+	return nil
+}
+
 func (p *Node) append(child *Node) {
 	child.parent = p
 	child.meta = p.meta
@@ -450,11 +473,6 @@ func parseType(xs SymbolsPtr) (zzzType, bool) {
 		return typ, false // TODO: check for struct
 	}
 	return typ, forward(xs, 1)
-}
-
-// typedef ::= <type> <def>
-func (p *Node) parseTypedef() bool {
-	return false
 }
 
 // struct ::= struct <def> -> { <typedef> [, <typedelem>] }
@@ -608,7 +626,7 @@ func (p *Node) parseValue(xs SymbolsPtr) bool {
 	return true
 }
 
-// call ::= <def> ( [<leaf> ,] )
+// call ::= <def> ( [<expr> ,] )
 func (p *Node) parseCall(xs SymbolsPtr) bool {
 	xsl := uint(len(*xs))
 	if xsl < 3 {
@@ -628,7 +646,7 @@ func (p *Node) parseCall(xs SymbolsPtr) bool {
 		if uint(len(*xs)) < 2 {
 			return false
 		}
-		if !child.parseLeaf(xs) {
+		if !child.parseExpr(xs) {
 			return false // could not parse node
 		}
 		if (*xs)[0].GetType() == symParClose {
@@ -644,13 +662,13 @@ func (p *Node) parseCall(xs SymbolsPtr) bool {
 	return true
 }
 
-// parenexpr ::= ( <leaf> )
+// parenexpr ::= ( <expr> )
 func (p *Node) parseParenExpr(xs SymbolsPtr) bool {
 	if (*xs)[0].GetType() != symParOpen {
 		return false
 	}
 	forward(xs, 1)
-	if !p.parseLeaf(xs) {
+	if !p.parseExpr(xs) {
 		return false
 	}
 	if (*xs)[0].GetType() != symParClose {
@@ -667,7 +685,7 @@ func (p *Node) parseTerm(xs SymbolsPtr) bool {
 	return true
 }
 
-// unary ::= <test|operation> <leaf>
+// unary ::= <test|operation> <expr>
 func (p *Node) parseUnary(xs SymbolsPtr) bool {
 	if len(*xs) < 2 {
 		return false // not enough symbols
@@ -680,7 +698,7 @@ func (p *Node) parseUnary(xs SymbolsPtr) bool {
 		}
 		forward(xs, 1)
 		child := nodeFactory[tokOperator](operator)
-		child.parseLeaf(xs)
+		child.parseExpr(xs)
 		p.append(child)
 		return true
 
@@ -691,14 +709,14 @@ func (p *Node) parseUnary(xs SymbolsPtr) bool {
 		}
 		forward(xs, 1)
 		child := nodeFactory[tokTest](test)
-		child.parseLeaf(xs)
+		child.parseExpr(xs)
 		p.append(child)
 		return true
 	}
 	return false
 }
 
-// pair ::= <term> <test|operator> <leaf>
+// pair ::= <term> <test|operator> <expr>
 func (p *Node) parsePair(xs SymbolsPtr) bool {
 	if len(*xs) < 3 {
 		return false // not enough symbols
@@ -718,10 +736,13 @@ func (p *Node) parsePair(xs SymbolsPtr) bool {
 
 	// then create the real child and copy the first child of dummy in real
 	var child *Node
+	var prio uint
 	if o, ok := convSym2ope[(*xs)[0].GetType()]; ok {
 		child = nodeFactory[tokOperator](o)
+		prio = opePrio[o]
 	} else if t, ok := convSym2test[(*xs)[0].GetType()]; ok {
 		child = nodeFactory[tokTest](t)
+		prio = testPrio[t]
 	} else {
 		*xs = sav
 		return false // not an operator or test
@@ -729,40 +750,60 @@ func (p *Node) parsePair(xs SymbolsPtr) bool {
 	forward(xs, 1)
 	child.append(dummy.Children[0])
 
+	parentPrio := -1
+	if o, ok := p.tok.(*opeToken); ok {
+		parentPrio = int(opePrio[o.Operator])
+	} else if t, ok := p.tok.(*testToken); ok {
+		parentPrio = int(testPrio[t.Test])
+	}
+	if parentPrio == -1 || prio >= uint(parentPrio) {
+		p.append(child)
+	}
+
 	// then parse the second child
-	if !child.parseLeaf(xs) {
+	if !child.parseExpr(xs) {
 		*xs = sav
 		return false // could not parse the second operand
 	}
-	p.append(child)
-	return true
-}
 
-// leaf ::= <unary> | <pair> | <term>
-func (p *Node) parseLeaf(xs SymbolsPtr) bool {
-	if !p.parseUnary(xs) && !p.parsePair(xs) && !p.parseTerm(xs) {
-		return false // cant parse the leaf
+	// priority testing
+	println("->   node:", child.tok.String(), prio)
+	println(">  parent:", p.tok.String(), parentPrio)
+
+	if parentPrio != -1 && prio < uint(parentPrio) {
+		y := child.pop(nil)
+		x := p.parent.swapChild(p, child)
+		child.append(x)
+		x.append(y)
 	}
 	return true
 }
 
-// return ::= return <leaf> | return
+// expr ::= <unary> | <pair> | <term>
+func (p *Node) parseExpr(xs SymbolsPtr) bool {
+	if !p.parseUnary(xs) && !p.parsePair(xs) && !p.parseTerm(xs) {
+		return false // cant parse the expr
+	}
+	return true
+}
+
+// return ::= return <expr> | return
 func (p *Node) parseReturn(xs SymbolsPtr) bool {
 	if (*xs)[0].GetType() != symKWReturn {
 		return false
 	}
 	forward(xs, 1)
 	node := nodeFactory[tokReturn]()
-	if !node.parseLeaf(xs) && (*xs)[0].GetType() != symSemicolon {
+	if !node.parseExpr(xs) && (*xs)[0].GetType() != symSemicolon {
 		return true
 	}
 	p.append(node)
 	return true
 }
 
-// expr ::= <leaf> ; | <set> ; | <return> ; | <if>
-func (p *Node) parseExpr(xs SymbolsPtr) bool {
-	if p.parseReturn(xs) || p.parseLeaf(xs) {
+// action ::= <expr> ; | <set> ; | <return> ; | <if>
+func (p *Node) parseAction(xs SymbolsPtr) bool {
+	if p.parseReturn(xs) || p.parseExpr(xs) {
 		if len(*xs) == 0 || (*xs)[0].GetType() != symSemicolon {
 			return false // missing semicolon
 		}
@@ -772,7 +813,7 @@ func (p *Node) parseExpr(xs SymbolsPtr) bool {
 	return false
 }
 
-// block ::= <expr> | { [<expr>] }
+// block ::= <action> | { [<action>] }
 func (p *Node) parseBlock(xs SymbolsPtr) bool {
 	if (*xs)[0].GetType() == symCurlyOpen {
 		block := nodeFactory[tokBlock]()
@@ -781,7 +822,7 @@ func (p *Node) parseBlock(xs SymbolsPtr) bool {
 			return false // expected at least '}'
 		}
 		for (*xs)[0].GetType() != symCurlyClose {
-			if !block.parseExpr(xs) {
+			if !block.parseAction(xs) {
 				return false
 			}
 			if len(*xs) == 0 {
@@ -792,7 +833,7 @@ func (p *Node) parseBlock(xs SymbolsPtr) bool {
 		p.append(block)
 		return true
 	}
-	return p.parseExpr(xs)
+	return p.parseAction(xs)
 }
 
 // arg ::= < <value> | <testsym> <value !def> >
@@ -859,8 +900,8 @@ func (p *Node) parseFunction(xs SymbolsPtr) bool {
 	return true
 }
 
-// action ::= <import> | <basically> | <function>
-func (p *Node) parseAction(xs SymbolsPtr) bool {
+// object ::= <import> | <basically> | <function>
+func (p *Node) parseObject(xs SymbolsPtr) bool {
 	return p.parseImport(xs) || p.parseBasically(xs) || p.parseFunction(xs)
 }
 
@@ -879,7 +920,7 @@ func Parse(symbols []Symbol) (*Node, error) {
 	node.makeMeta()
 
 	for len(symbols) > 0 {
-		if !node.parseAction(&symbols) {
+		if !node.parseObject(&symbols) {
 			return nil, errors.New("invalid")
 		}
 	}

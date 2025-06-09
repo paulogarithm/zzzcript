@@ -203,7 +203,7 @@ func TestParseUnary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !n.parseLeaf(&xs) {
+	if !n.parseExpr(&xs) {
 		t.Fatal("expected to work")
 	}
 }
@@ -215,7 +215,7 @@ func TestParsePairFromLeaf(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !n.parseLeaf(&xs) {
+	if !n.parseExpr(&xs) {
 		t.Fatal("expected to work")
 	}
 
@@ -225,7 +225,7 @@ func TestParsePairFromLeaf(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !n.parseLeaf(&xs) {
+	if !n.parseExpr(&xs) {
 		t.Fatal("expected to work")
 	}
 
@@ -235,7 +235,7 @@ func TestParsePairFromLeaf(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !n.parseLeaf(&xs) {
+	if !n.parseExpr(&xs) {
 		t.Fatal("expected to work")
 	}
 }
@@ -262,7 +262,7 @@ func TestParseCall(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !n.parseLeaf(&xs) {
+	if !n.parseExpr(&xs) {
 		t.Fatal("expected to work")
 	}
 
@@ -271,7 +271,7 @@ func TestParseCall(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !n.parseLeaf(&xs) {
+	if !n.parseExpr(&xs) {
 		t.Fatal("expected to work")
 	}
 
@@ -280,7 +280,7 @@ func TestParseCall(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !n.parseLeaf(&xs) {
+	if !n.parseExpr(&xs) {
 		t.Fatal("expected to work")
 	}
 }

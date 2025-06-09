@@ -38,6 +38,42 @@ procedure <file>:
                         int <5>
                     int <120>
 
-///
+// in asthme //
 
+=== instructions
+[000] f0:   ref     k0, k1      # reference io.print
+[001] f1:   lte     a1, 1       # if a1 <= 1...
+[002]       jmp     7           # jmp to 002 + 7 = 009
+[003]       mov     r1, a1      # mov value of a1 in r1
+[004]       ldshort r2, 1       # put short 1 in r2
+[005]       sub     r1, r2      # r1 -= r2
+[006]       call    f1, r1, 1   # call f1 with 1 arg: r1
+[007]       mov     r2, a1      # put value of a1 in r2
+[008]       mul     r1, r2      # r1 *= r2
+[009]       ret1    r1          # return r1
+[010]       ldshort r1, 1       # put 1 in r1
+[011]       ret1    r1          # return r1
+[012] main: ldshort r1, 5       # put 5 in r1
+[013]       call    f1, r1, 1   # call f1 with r1 arg
+[014]       ldshort r2, 120     # put 120 in r2
+[015]       seteq   r1, r2      # set r1 == r2
+[016]       call    f0, r1, 1   # call f0 with 1 arg: r1
+[017]       
+[018]
+[019]
+[020]
+[021]
+[022]
+[023]
+[024]
+[025]
+[026]
+[027]
+[028]
+[029]
+
+
+=== constants
+k[0] io
+k[1] print
 
