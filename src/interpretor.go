@@ -37,8 +37,8 @@ const (
 func compareNodeAndArgument(tok Token, arg argument) compareState {
 	switch getTypeOfArgument(arg) {
 	case typInt:
-		x := tok.(*intToken).Data
-		y := arg.(zzzInt)
+		x := arg.(zzzInt)
+		y := tok.(*intToken).Data
 		if x == y {
 			return same
 		} else if x < y {
@@ -47,8 +47,8 @@ func compareNodeAndArgument(tok Token, arg argument) compareState {
 			return bigger
 		}
 	case typNumber:
-		x := tok.(*numberToken).Data
-		y := arg.(zzzNumber)
+		x := arg.(zzzNumber)
+		y := tok.(*numberToken).Data
 		if x == y {
 			return same
 		} else if x < y {
@@ -57,15 +57,15 @@ func compareNodeAndArgument(tok Token, arg argument) compareState {
 			return bigger
 		}
 	case typString:
-		x := tok.(*strToken).Data
-		y := arg.(string)
+		x := arg.(string)
+		y := tok.(*strToken).Data
 		if x == y {
 			return same
 		}
 		return smaller
 	case typBoolean:
-		x := tok.(*boolToken).Data
-		y := arg.(bool)
+		x := arg.(bool)
+		y := tok.(*boolToken).Data
 		if x == y {
 			return same
 		}
