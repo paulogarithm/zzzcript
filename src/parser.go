@@ -420,7 +420,9 @@ var nodeFactory = map[tokenType]func(...any) *Node{
 func (p *Node) replaceChild(from *Node, to *Node) *Node {
 	for k, child := range p.Children {
 		if child == from {
+			to.parent = p
 			p.Children[k] = to
+			from.parent = nil
 			return from
 		}
 	}
@@ -805,29 +807,30 @@ func (p *Node) parsePair(xs SymbolsPtr) bool {
 	forward(xs, 1)
 	child.append(dummy.Children[0])
 
-	// get the priority
-	parentPrio := -1
-	if o, ok := p.tok.(*opeToken); ok {
-		parentPrio = int(opePrio[o.Operator])
-	} else if t, ok := p.tok.(*testToken); ok {
-		parentPrio = int(testPrio[t.Test])
-	}
-
 	// add the child: child.parent = p
 	p.append(child)
 
-	// before parsing second child: reorder
-	if parentPrio >= 0 && uint(parentPrio) > prio && p.parent != nil {
-		println("==> SWAPPP <==")
+	// get the priority
+	for {
 		parent := child.parent // same as p
-		pparent := parent.parent // same as p.parent
-		x := child.pop(nil) // get the number back
-		if tmp := parent.pop(child); tmp != child { // remove the child from parent
-			log.Fatal("Expected it to be the child: parent =", parent.String())
+		parentPrio := -1
+		if o, ok := parent.tok.(*opeToken); ok {
+			parentPrio = int(opePrio[o.Operator])
+		} else if t, ok := parent.tok.(*testToken); ok {
+			parentPrio = int(testPrio[t.Test])
 		}
-		parent.append(x) // re-add the object
-		child.append(parent) // re-add the parent in the child
-		pparent.replaceChild(parent, child) // change the parent's parent child
+		pparent := parent.parent // same as p.parent
+		if parentPrio >= 0 && uint(parentPrio) > prio && pparent != nil {
+			x := child.pop(nil)                         // get the number back
+			if tmp := parent.pop(child); tmp != child { // remove the child from parent
+				log.Fatal("Expected it to be the child: parent =", parent.String())
+			}
+			parent.append(x)                    // re-add the object
+			child.append(parent)                // re-add the parent in the child
+			pparent.replaceChild(parent, child) // change the parent's parent child
+		} else {
+			break
+		}
 	}
 
 	// then parse the second child
@@ -983,6 +986,6 @@ func Parse(symbols []Symbol) (*Node, error) {
 			return nil, errors.New("could not parse the file")
 		}
 	}
-	println(node.String())
+	// println(node.String())
 	return node, nil
 }
