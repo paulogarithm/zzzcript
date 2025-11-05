@@ -250,7 +250,7 @@ var doPairOperation = map[zzzType]map[operatorType]func(x, y argument) argument{
 var doUnaryOperation = map[zzzType]map[operatorType]func(x argument) argument{
 	typInt: {
 		opeBitNot: func(x argument) argument { return ^(x.(zzzInt)) },
-		opeMinus: func(x argument) argument { return -(x.(zzzInt)) },
+		opeMinus:  func(x argument) argument { return -(x.(zzzInt)) },
 	},
 	typNumber: {
 		opeMinus: func(x argument) argument { return -(x.(zzzNumber)) },

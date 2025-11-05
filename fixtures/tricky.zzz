@@ -1,6 +1,6 @@
 import print in io;
 
-func main() print(3 < 5 == true && false || true);
+func main() print(3 < 5 == true and false or true);
 
 // should be true
 
@@ -19,3 +19,4 @@ procedure <file>:
                         bool <true>
                     bool <false>
                 bool <true>
+

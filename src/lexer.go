@@ -101,7 +101,7 @@ var dualchar2sym = map[string]symbolType{
 	"<<": symShl,
 	">>": symShr,
 	"&&": symAnd,
-	"||": symAnd,
+	"||": symOr,
 }
 
 var keyword2sym = map[string]symbolType{

@@ -2,6 +2,7 @@ package zzz
 
 import (
 	"errors"
+	"log"
 	"strconv"
 	"strings"
 )
@@ -305,6 +306,31 @@ func (s *typStructToken) String() string {
 	return "type <struct " + s.StructName + ">"
 }
 
+// stack trace
+
+type StackTrace struct {
+	funcNames []string
+}
+
+func (s *StackTrace) Push(fname string) {
+	s.funcNames = append(s.funcNames, fname)
+}
+
+func (s StackTrace) String() string {
+	buf := ""
+	for n, x := range s.funcNames {
+		if n != 0 {
+			buf += " -> "
+		}
+		buf += x + "()"
+	}
+	return buf
+}
+
+func (s *StackTrace) Extend(other StackTrace) {
+	s.funcNames = append(s.funcNames, other.funcNames...)
+}
+
 // node type & functions for nodes
 
 type functionMeta struct {
@@ -330,9 +356,10 @@ type Node struct {
 
 func newNode(tok Token) *Node {
 	return &Node{
-		tok:    tok,
-		meta:   nil,
-		parent: nil,
+		tok:      tok,
+		meta:     nil,
+		parent:   nil,
+		Children: []*Node{},
 	}
 }
 
@@ -390,7 +417,7 @@ var nodeFactory = map[tokenType]func(...any) *Node{
 	},
 }
 
-func (p *Node) swapChild(from *Node, to *Node) *Node {
+func (p *Node) replaceChild(from *Node, to *Node) *Node {
 	for k, child := range p.Children {
 		if child == from {
 			p.Children[k] = to
@@ -708,10 +735,7 @@ func (p *Node) parseParenExpr(xs SymbolsPtr) bool {
 
 // term ::= <value> | <call> | <parenexpr>
 func (p *Node) parseTerm(xs SymbolsPtr) bool {
-	if !p.parseCall(xs) && !p.parseParenExpr(xs) && !p.parseValue(xs) {
-		return false
-	}
-	return true
+	return (p.parseCall(xs) || p.parseParenExpr(xs) || p.parseValue(xs))
 }
 
 // unary ::= <test|operation> <expr>
@@ -744,6 +768,8 @@ func (p *Node) parseUnary(xs SymbolsPtr) bool {
 	}
 	return false
 }
+
+var val int = 0
 
 // pair ::= <term> <test|operator> <expr>
 func (p *Node) parsePair(xs SymbolsPtr) bool {
@@ -779,14 +805,29 @@ func (p *Node) parsePair(xs SymbolsPtr) bool {
 	forward(xs, 1)
 	child.append(dummy.Children[0])
 
+	// get the priority
 	parentPrio := -1
 	if o, ok := p.tok.(*opeToken); ok {
 		parentPrio = int(opePrio[o.Operator])
 	} else if t, ok := p.tok.(*testToken); ok {
 		parentPrio = int(testPrio[t.Test])
 	}
-	if parentPrio == -1 || prio >= uint(parentPrio) {
-		p.append(child)
+
+	// add the child: child.parent = p
+	p.append(child)
+
+	// before parsing second child: reorder
+	if parentPrio >= 0 && uint(parentPrio) > prio && p.parent != nil {
+		println("==> SWAPPP <==")
+		parent := child.parent // same as p
+		pparent := parent.parent // same as p.parent
+		x := child.pop(nil) // get the number back
+		if tmp := parent.pop(child); tmp != child { // remove the child from parent
+			log.Fatal("Expected it to be the child: parent =", parent.String())
+		}
+		parent.append(x) // re-add the object
+		child.append(parent) // re-add the parent in the child
+		pparent.replaceChild(parent, child) // change the parent's parent child
 	}
 
 	// then parse the second child
@@ -794,25 +835,12 @@ func (p *Node) parsePair(xs SymbolsPtr) bool {
 		*xs = sav
 		return false // could not parse the second operand
 	}
-
-	// priority testing
-	// println("->   node:", child.tok.String(), prio)
-	// println(">  parent:", p.tok.String(), parentPrio)
-	if parentPrio != -1 && prio < uint(parentPrio) {
-		y := child.pop(nil)
-		x := p.parent.swapChild(p, child)
-		child.append(x)
-		x.append(y)
-	}
 	return true
 }
 
 // expr ::= <unary> | <pair> | <term>
 func (p *Node) parseExpr(xs SymbolsPtr) bool {
-	if !p.parseUnary(xs) && !p.parsePair(xs) && !p.parseTerm(xs) {
-		return false // cant parse the expr
-	}
-	return true
+	return (p.parseUnary(xs) || p.parsePair(xs) || p.parseTerm(xs))
 }
 
 // return ::= return <expr> | return
@@ -894,7 +922,6 @@ func (p *Node) parseFunction(xs SymbolsPtr) bool {
 	if (*xs)[0].GetType() != symKWFunc || (*xs)[1].GetType() != symDef || (*xs)[2].GetType() != symParOpen {
 		return false
 	}
-
 	// create the function node
 	defName, ok := (*xs)[1].(strSymbol)
 	if !ok {
@@ -939,7 +966,11 @@ func (n *Node) String() string {
 	buf := "=== AST:\n"
 	buf += n.leveledString(0) + "\n"
 	buf += "=== METADATA:\n"
-	buf += n.showMetadata()
+	if n.meta != nil {
+		buf += n.showMetadata()
+	} else {
+		buf += "no metadata"
+	}
 	return buf
 }
 
@@ -949,8 +980,9 @@ func Parse(symbols []Symbol) (*Node, error) {
 
 	for len(symbols) > 0 {
 		if !node.parseObject(&symbols) {
-			return nil, errors.New("invalid")
+			return nil, errors.New("could not parse the file")
 		}
 	}
+	println(node.String())
 	return node, nil
 }
