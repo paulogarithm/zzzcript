@@ -78,7 +78,17 @@ func main() {
 	// 	print(fact(5) == 120, fact(5));
 	// }
 	// `)
-	err := zzz.Run(`import print in io; func main() print(4*3*(2+1));`)
+	err := zzz.Run(`
+	import print in io;
+
+	basically fact(int) -> int;
+	func fact(<1) return 1;
+	func fact(n) return n * fact(n - 1);
+
+	basically add(int, int) -> int;
+	func add(a, b) return a + b;
+
+	func main() print(fact(5), add(0,2));`)
 	if err != nil {
 		log.Fatal(err)
 	}
