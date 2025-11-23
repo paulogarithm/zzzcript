@@ -2,7 +2,6 @@ package zzz
 
 import (
 	"fmt"
-	"strconv"
 )
 
 // usefull
@@ -80,30 +79,10 @@ func compareNodeAndArgument(tok Token, arg argument) compareState {
 
 var builtinFunctions = map[string]map[string]func([]argument) argument{
 	"io": {
-		"print": func(args []argument) argument {
-			buf := ""
-			for n, arg := range args {
-				if n != 0 {
-					buf += " "
-				}
-				switch x := arg.(type) {
-				case zzzInt:
-					buf += strconv.FormatInt(int64(x), 10)
-				case zzzNumber:
-					buf += strconv.FormatFloat(float64(x), 'f', -1, 64)
-				case string:
-					buf += x
-				case bool:
-					buf += strconv.FormatBool(x)
-				case nil:
-					buf += "null"
-				default:
-					buf += "<unknown>"
-				}
-			}
-			fmt.Println(buf)
-			return nil
-		},
+		"print": builtinPrint,
+	},
+	"compare": {
+		"event": builtinEven,
 	},
 }
 
@@ -479,7 +458,6 @@ func Interpret(ast *Node) error {
 	if mNode == nil {
 		return nil // no main, no execution
 	}
-	// return nil
 
 	// TODO: maybe check for the int it returns to exit ?
 	_, err := callFunction(ast, mNode, []argument{})

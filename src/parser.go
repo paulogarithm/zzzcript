@@ -1,7 +1,7 @@
 package zzz
 
 import (
-	"errors"
+	"fmt"
 	"log"
 	"strconv"
 	"strings"
@@ -16,9 +16,9 @@ type zzzNumber float64
 
 type SymbolsPtr *[]Symbol
 
-func forward(xs SymbolsPtr, off uint) bool {
+func forward(xs SymbolsPtr, off uint) error {
 	*xs = (*xs)[off:]
-	return true
+	return nil
 }
 
 var builtinDefs = map[string]map[string]functionMeta{
@@ -118,25 +118,27 @@ var setOfTestUnaries = map[testType]void{testNot: {}}
 type zzzType uint
 
 const (
-	typNull     zzzType = iota // null type
-	typInt                     // an int (3)
-	typNumber                  // a number (3.14)
-	typString                  // a string ("hello")
-	typBoolean                 // a boolean (true)
-	typStruct                  // a struct (struct Element)
-	typList                    // a list ([1, 2, 3])
-	typUserdata                // an userdata
+	typNull      zzzType = iota // null type
+	typInt                      // an int (3)
+	typNumber                   // a number (3.14)
+	typCharacter                // a character ('h')
+	typString                   // a string ("hello")
+	typBoolean                  // a boolean (true)
+	typStruct                   // a struct (struct Element)
+	typList                     // a list ([1, 2, 3])
+	typUserdata                 // an userdata
 )
 
 var convType2Str = map[zzzType]string{
-	typNull:     "null",
-	typInt:      "int",
-	typNumber:   "number",
-	typString:   "string",
-	typBoolean:  "bool",
-	typStruct:   "struct",
-	typList:     "list",
-	typUserdata: "userdata",
+	typNull:      "null",
+	typInt:       "int",
+	typCharacter: "char",
+	typNumber:    "number",
+	typString:    "string",
+	typBoolean:   "bool",
+	typStruct:    "struct",
+	typList:      "list",
+	typUserdata:  "userdata",
 }
 
 // tokens
@@ -502,7 +504,7 @@ func (n *Node) showMetadata() string {
 
 // parser
 
-// type ::= int | number | boolean | string
+// type ::= int | number | boolean | string | null
 func parseType(xs SymbolsPtr) (zzzType, bool) {
 	var typ zzzType
 	switch (*xs)[0].GetType() {
@@ -514,21 +516,24 @@ func parseType(xs SymbolsPtr) (zzzType, bool) {
 		typ = typNumber
 	case symTString:
 		typ = typString
+	case symKWNull:
+		typ = typNull
 	default:
-		return typ, false // TODO: check for struct
+		return typ, false
 	}
-	return typ, forward(xs, 1)
+	forward(xs, 1)
+	return typ, true
 }
 
 // struct ::= struct <def> -> { <typedef> [, <typedelem>] }
-func (p *Node) parseStruct(SymbolsPtr) bool {
-	return false
+func (p *Node) parseStruct(SymbolsPtr) error {
+	return fmt.Errorf("<wip>")
 }
 
 // functype ::= <def> ( <type> [, <type>] ) (-> <type>)?
-func (p *Node) parseFuncType(xs SymbolsPtr) bool {
+func (p *Node) parseFuncType(xs SymbolsPtr) error {
 	if (*xs)[0].GetType() != symDef || (*xs)[1].GetType() != symParOpen {
-		return false
+		return fmt.Errorf("expected <def> ( to start, got '%s %s'", (*xs)[0].String(), (*xs)[1].String())
 	}
 	def := (*xs)[0].(strSymbol).Content
 	forward(xs, 2)
@@ -546,7 +551,7 @@ func (p *Node) parseFuncType(xs SymbolsPtr) bool {
 	// check for the in types
 	t, ok = parseType(xs)
 	if !ok {
-		return false
+		return fmt.Errorf("expected type (eg: int, string, ...) got '%s'", (*xs)[0].String())
 	}
 
 	fmeta.In = append(fmeta.In, t)
@@ -554,12 +559,12 @@ func (p *Node) parseFuncType(xs SymbolsPtr) bool {
 		forward(xs, 1)
 		t, ok = parseType(xs)
 		if !ok {
-			return false
+			return fmt.Errorf("expected type (eg: int, string, ...) got '%s'", (*xs)[0].String())
 		}
 		fmeta.In = append(fmeta.In, t)
 	}
 	if (*xs)[0].GetType() != symParClose {
-		return false
+		return fmt.Errorf("expected end of function type with ')', got '%s'", (*xs)[0].String())
 	}
 
 checkRet:
@@ -571,28 +576,33 @@ checkRet:
 	forward(xs, 1)
 	t, ok = parseType(xs) // TODO: return tuples
 	if !ok {
-		return false
+		return fmt.Errorf("expected type for return (eg: int, string, ...) got '%s'", (*xs)[0].String())
 	}
 	fmeta.Out = append(fmeta.Out, t)
 
 success:
 	p.meta.FunctionMeta[def] = fmeta
-	return true
+	return nil
 }
 
 // basically ::= basically (<struct> | <functype>) ;
-func (p *Node) parseBasically(xs SymbolsPtr) bool {
+func (p *Node) parseBasically(xs SymbolsPtr) error {
 	if (*xs)[0].GetType() != symKWBasically {
-		return false
+		return fmt.Errorf("basically parsing should start with a basically keyword")
 	}
 	forward(xs, 1)
-	if !p.parseStruct(xs) && !p.parseFuncType(xs) {
-		return false
+	var errA, errB error
+	errA = p.parseStruct(xs)
+	if errA != nil {
+		errB = p.parseFuncType(xs)
+	}
+	if errB != nil {
+		return fmt.Errorf("in basically, could not compute -> not a struct (%s), nor a func (%s)", errA.Error(), errB.Error())
 	}
 	if (*xs)[0].GetType() == symSemicolon {
 		return forward(xs, 1)
 	}
-	return false
+	return nil
 }
 
 // import ::= import <def> [, <def>]? in (<def> | <string>) ;
@@ -600,11 +610,11 @@ func (p *Node) parseBasically(xs SymbolsPtr) bool {
 // TODO: change this to use forward() maybe.
 //
 // TODO: for non stdlibs (for strings) check the path
-func (p *Node) parseImport(sx SymbolsPtr) bool {
+func (p *Node) parseImport(sx SymbolsPtr) error {
 	// check for the requierments
 	sxl := uint(len(*sx))
 	if sxl < 5 {
-		return false
+		return fmt.Errorf("expected at least 5 elements in import (import <def> in <def> ;)")
 	}
 	var (
 		inIndex uint = 2
@@ -612,13 +622,13 @@ func (p *Node) parseImport(sx SymbolsPtr) bool {
 	)
 	if (*sx)[0].GetType() != symKWImport ||
 		(*sx)[1].GetType() != symDef {
-		return false
+		return fmt.Errorf("expected to begin with 'import <def>', got: '%s %s'", (*sx)[0].String(), (*sx)[1].String())
 	}
 
 	// check first node
 	x, ok := (*sx)[1].(strSymbol)
 	if !ok {
-		return false
+		return fmt.Errorf("expected first operand to be string-like definition, got '%s'", (*sx)[1].String())
 	}
 	list = append(list, nodeFactory[tokDef](x.Content))
 
@@ -628,7 +638,7 @@ func (p *Node) parseImport(sx SymbolsPtr) bool {
 		((*sx)[inIndex].GetType() == symComma && (*sx)[inIndex+1].GetType() == symDef) {
 		x, ok = (*sx)[inIndex+1].(strSymbol)
 		if !ok {
-			return false
+			return fmt.Errorf("expected operands to be string-like definition, got '%s'", (*sx)[inIndex+1].String())
 		}
 		list = append(list, nodeFactory[tokDef](x.Content))
 		inIndex += 2
@@ -636,15 +646,15 @@ func (p *Node) parseImport(sx SymbolsPtr) bool {
 
 	// check for the lib
 	if (*sx)[inIndex].GetType() != symKWIn {
-		return false
+		return fmt.Errorf("expected to have in (librairies) got '%s'", (*sx)[inIndex].String())
 	}
 	actualSym := (*sx)[inIndex+1].GetType()
 	if actualSym != symString && actualSym != symDef {
-		return false
+		return fmt.Errorf("expected library to be string or def, got '%s'", (*sx)[inIndex+1].String())
 	}
 	libName, ok := (*sx)[inIndex+1].(strSymbol)
 	if !ok {
-		return false
+		return fmt.Errorf("could not cast symbol into string, got '%s'", (*sx)[inIndex+1].String())
 	}
 	libNode := nodeFactory[tokImport](libName.Content)
 	for _, v := range list {
@@ -662,7 +672,7 @@ func (p *Node) parseImport(sx SymbolsPtr) bool {
 }
 
 // value ::= <def> | <number> | <int> | <string> | <null>
-func (p *Node) parseValue(xs SymbolsPtr) bool {
+func (p *Node) parseValue(xs SymbolsPtr) error {
 	val := (*xs)[0]
 	switch val.GetType() {
 	case symDef:
@@ -678,117 +688,136 @@ func (p *Node) parseValue(xs SymbolsPtr) bool {
 	case symKWNull:
 		p.append(nodeFactory[tokNull]())
 	default:
-		return false // not a valid value
+		return fmt.Errorf("invalid value: %s", val.String())
 	}
 	forward(xs, 1)
-	return true
+	return nil
 }
 
 // call ::= <def> ( [<expr> ,] )
-func (p *Node) parseCall(xs SymbolsPtr) bool {
+func (p *Node) parseCall(xs SymbolsPtr) error {
 	xsl := uint(len(*xs))
 	if xsl < 3 {
-		return false // invalid way to make call
+		return fmt.Errorf("call expects at least 3 arguments, got %d", xsl)
 	}
+
+	sav := make([]Symbol, len(*xs))
+	copy(sav, *xs)
+
 	if (*xs)[0].GetType() != symDef || (*xs)[1].GetType() != symParOpen {
-		return false // expected def or '('.
+		return fmt.Errorf("invalid syntax for call: expected '<def> (', got '%s %s'", (*xs)[0].String(), (*xs)[1].String())
 	}
 
 	callFunction, ok := (*xs)[0].(strSymbol)
 	if !ok {
-		return false // couldnt parse strSymbol from definition
+		return fmt.Errorf("couldnt parse strSymbol from definition: '%s'", (*xs)[0].String())
 	}
 	forward(xs, 2)
 	child := nodeFactory[tokCall](callFunction.Content)
+	pos := 1
 	for (*xs)[0].GetType() != symParClose {
 		if uint(len(*xs)) < 2 {
-			return false
+			*xs = sav
+			return fmt.Errorf("expected at least 2 tokens: '<expr> )', got %d", uint(len(*xs)))
 		}
-		if !child.parseExpr(xs) {
-			return false // could not parse node
+		if err := child.parseExpr(xs); err != nil {
+			*xs = sav
+			return fmt.Errorf("in call of '%s', object %d -> %s", callFunction.Content, pos, err.Error())
 		}
 		if (*xs)[0].GetType() == symParClose {
 			break
 		}
 		if (*xs)[0].GetType() != symComma {
-			return false
+			return fmt.Errorf("comma expcter after function argument %d, got '%s'", pos, (*xs)[0].String())
 		}
 		forward(xs, 1)
+		pos++
 	}
 	forward(xs, 1)
 	p.append(child)
-	return true
+	return nil
 }
 
 // parenexpr ::= ( <expr> )
-func (p *Node) parseParenExpr(xs SymbolsPtr) bool {
+func (p *Node) parseParenExpr(xs SymbolsPtr) error {
 	if (*xs)[0].GetType() != symParOpen {
-		return false
+		return fmt.Errorf("expected '(', got '%s'", (*xs)[0].String())
 	}
 	forward(xs, 1)
-	if !p.parseExpr(xs) {
-		return false
+	if err := p.parseExpr(xs); err != nil {
+		return fmt.Errorf("in paren expr, could not parse expression -> (%s)", err.Error())
 	}
 	if (*xs)[0].GetType() != symParClose {
-		return false
+		return fmt.Errorf("expected ')', got '%s'", (*xs)[0].String())
 	}
 	return forward(xs, 1)
 }
 
-// term ::= <value> | <call> | <parenexpr>
-func (p *Node) parseTerm(xs SymbolsPtr) bool {
-	return (p.parseCall(xs) || p.parseParenExpr(xs) || p.parseValue(xs))
+// term ::= <call> | <parenexpr> | <value>
+func (p *Node) parseTerm(xs SymbolsPtr) error {
+	err := [3]error{nil}
+	err[0] = p.parseCall(xs)
+	if err[0] != nil {
+		err[1] = p.parseParenExpr(xs)
+	}
+	if err[1] != nil {
+		err[2] = p.parseValue(xs)
+	}
+	if err[2] != nil {
+		return fmt.Errorf("in term, could not parse -> not a call (%s), nor parenexpr (%s), nor value (%s)", err[0].Error(), err[1].Error(), err[2].Error())
+	}
+	return nil
 }
 
 // unary ::= <test|operation> <expr>
-func (p *Node) parseUnary(xs SymbolsPtr) bool {
+func (p *Node) parseUnary(xs SymbolsPtr) error {
 	if len(*xs) < 2 {
-		return false // not enough symbols
+		return fmt.Errorf("expected at least 2 symbols, got %d", len(*xs))
 	}
 
 	// check for operation
 	if operator, ok := convSym2ope[(*xs)[0].GetType()]; ok {
 		if _, ok := setOfOpeUnaries[operator]; !ok {
-			return false // not a unary operator
+			return fmt.Errorf("not a unary operator: '%s'", convOperator2Str[operator])
 		}
 		forward(xs, 1)
 		child := nodeFactory[tokOperator](operator)
-		child.parseExpr(xs)
+		child.parseTerm(xs)
 		p.append(child)
-		return true
+		return nil
 
 		// check for test
 	} else if test, ok := convSym2test[(*xs)[0].GetType()]; ok {
 		if _, ok := setOfTestUnaries[test]; !ok {
-			return false // not a unary test
+			return fmt.Errorf("not a unary test: '%s'", convTest2Str[test])
 		}
 		forward(xs, 1)
 		child := nodeFactory[tokTest](test)
-		child.parseExpr(xs)
+		child.parseTerm(xs)
 		p.append(child)
-		return true
+		return nil
 	}
-	return false
+	return fmt.Errorf("not a unary operator/test: '%s'", (*xs)[0].String())
 }
 
-var val int = 0
-
 // pair ::= <term> <test|operator> <expr>
-func (p *Node) parsePair(xs SymbolsPtr) bool {
+func (p *Node) parsePair(xs SymbolsPtr) error {
 	if len(*xs) < 3 {
-		return false // not enough symbols
+		return fmt.Errorf("expected at least 3 symbols, got %d", len(*xs))
 	}
 
 	// create a dummy node to parse the first term (auto forward)
 	sav := make([]Symbol, len(*xs))
 	copy(sav, *xs)
+
 	dummy := nodeFactory[tokProcedure]("")
-	if !dummy.parseTerm(xs) {
-		return false // could not parse term in the first operand
+	if err := dummy.parseTerm(xs); err != nil {
+		return fmt.Errorf("in pair, could not parse term in the first operand -> %s", err.Error())
 	}
 	if len(*xs) < 2 {
+		err := fmt.Errorf("exptected at least 2 operators after, got %d", len(*xs))
 		*xs = sav
-		return false
+		return err
 	}
 
 	// then create the real child and copy the first child of dummy in real
@@ -802,7 +831,7 @@ func (p *Node) parsePair(xs SymbolsPtr) bool {
 		prio = testPrio[t]
 	} else {
 		*xs = sav
-		return false // not an operator or test
+		return fmt.Errorf("not an operator or test in symbol '%s'", (*xs)[0].String())
 	}
 	forward(xs, 1)
 	child.append(dummy.Children[0])
@@ -834,101 +863,123 @@ func (p *Node) parsePair(xs SymbolsPtr) bool {
 	}
 
 	// then parse the second child
-	if !child.parseExpr(xs) {
+	if err := child.parseExpr(xs); err != nil {
 		*xs = sav
-		return false // could not parse the second operand
+		return fmt.Errorf("in pair, could not parse the second operand -> %s", err.Error())
 	}
-	return true
+	return nil
 }
 
 // expr ::= <unary> | <pair> | <term>
-func (p *Node) parseExpr(xs SymbolsPtr) bool {
-	return (p.parseUnary(xs) || p.parsePair(xs) || p.parseTerm(xs))
+func (p *Node) parseExpr(xs SymbolsPtr) error {
+	errs := [3]error{nil}
+	errs[0] = p.parseUnary(xs)
+	if errs[0] != nil {
+		errs[1] = p.parsePair(xs)
+	}
+	if errs[1] != nil {
+		errs[2] = p.parseTerm(xs)
+	}
+	if errs[2] != nil {
+		return fmt.Errorf("in expr -> not a unary (%s) nor a pais (%s), nor a term (%s)", errs[0], errs[1], errs[2])
+	}
+	return nil
 }
 
 // return ::= return <expr> | return
-func (p *Node) parseReturn(xs SymbolsPtr) bool {
+func (p *Node) parseReturn(xs SymbolsPtr) error {
 	if (*xs)[0].GetType() != symKWReturn {
-		return false
+		return fmt.Errorf("expected 'return' keyword")
 	}
 	forward(xs, 1)
 	node := nodeFactory[tokReturn]()
-	if !node.parseExpr(xs) && (*xs)[0].GetType() != symSemicolon {
-		return true
+	if (*xs)[0].GetType() == symSemicolon {
+		return nil // its just 'return ;'
+	}
+	if err := node.parseExpr(xs); err != nil {
+		return fmt.Errorf("trying to parse content in return: %s", err.Error())
 	}
 	p.append(node)
-	return true
+	return nil
 }
 
 // action ::= <expr> ; | <set> ; | <return> ; | <if>
-func (p *Node) parseAction(xs SymbolsPtr) bool {
-	if p.parseReturn(xs) || p.parseExpr(xs) {
-		if len(*xs) == 0 || (*xs)[0].GetType() != symSemicolon {
-			return false // missing semicolon
+func (p *Node) parseAction(xs SymbolsPtr) error {
+	var a, b error
+	a = p.parseReturn(xs)
+	if a != nil {
+		b = p.parseExpr(xs)
+		if b != nil {
+			return fmt.Errorf("not an action -> not return (%s), not expr (%s)", a.Error(), b.Error())
 		}
-		forward(xs, 1)
-		return true
 	}
-	return false
+	if len(*xs) == 0 || (*xs)[0].GetType() != symSemicolon {
+		return fmt.Errorf("missing semicolon")
+	}
+	forward(xs, 1)
+	return nil
 }
 
 // block ::= <action> | { [<action>] }
-func (p *Node) parseBlock(xs SymbolsPtr) bool {
+func (p *Node) parseBlock(xs SymbolsPtr) (err error) {
 	if (*xs)[0].GetType() == symCurlyOpen {
 		block := nodeFactory[tokBlock]()
 		forward(xs, 1)
 		if len(*xs) == 0 {
-			return false // expected at least '}'
+			return fmt.Errorf("expected at least an argument after '{'")
 		}
 		for (*xs)[0].GetType() != symCurlyClose {
-			if !block.parseAction(xs) {
-				return false
+			if err = block.parseAction(xs); err != nil {
+				return fmt.Errorf("trying to parse action in block -> %s", err.Error())
 			}
 			if len(*xs) == 0 {
-				return false // expected end of block '}'
+				return fmt.Errorf("expected end of block '}'")
 			}
 		}
 		forward(xs, 1)
 		p.append(block)
-		return true
+		return nil
 	}
-	return p.parseAction(xs)
+	if err = p.parseAction(xs); err != nil {
+		return fmt.Errorf("trying to parse only action -> %s", err.Error())
+	}
+	return nil
 }
 
 // arg ::= < <value> | <testsym> <value !def> >
-func (p *Node) parseArg(xs SymbolsPtr) bool {
+func (p *Node) parseArg(xs SymbolsPtr) (err error) {
 	// check if its a test sym
 	test, ok := convSym2test[(*xs)[0].GetType()]
 	if ok {
 		forward(xs, 1)
 		testNode := nodeFactory[tokTest](test)
 		if (*xs)[0].GetType() == symDef {
-			return false // definition not accepted when pattern matching test
+			return fmt.Errorf("definition not accepted when pattern matching test")
 		}
-		if !testNode.parseValue(xs) {
-			return false // could not parse value
+		if err = testNode.parseValue(xs); err != nil {
+			return fmt.Errorf("trying to parse value after test in argument -> %s", err.Error())
 		}
 		p.append(testNode)
 
 		// or check if it's a value
-	} else if !p.parseValue(xs) {
-		return false
+	} else if err = p.parseValue(xs); err != nil {
+		return fmt.Errorf("trying to parse value in argument -> %s", err.Error())
 	}
-	return true
+	return nil
 }
 
 // function ::= func <def> ( [<arg> ,] ) <block>
-func (p *Node) parseFunction(xs SymbolsPtr) bool {
+func (p *Node) parseFunction(xs SymbolsPtr) (err error) {
 	if len(*xs) < 6 { // smallest is "func a ( ) return ;" or "func a ( ) { }" which is 6
-		return false
+		return fmt.Errorf("a function should have at least 6 tokens: 'func a ( ) return ;'")
 	}
 	if (*xs)[0].GetType() != symKWFunc || (*xs)[1].GetType() != symDef || (*xs)[2].GetType() != symParOpen {
-		return false
+		return fmt.Errorf("a function should start with these 3 tokens: 'func <def> ('")
 	}
 	// create the function node
 	defName, ok := (*xs)[1].(strSymbol)
 	if !ok {
-		return false // def is not a string
+		return fmt.Errorf("function name is not a string'") // def is not a string
 	}
 	funcNode := nodeFactory[tokFunction](defName.Content)
 	forward(xs, 3)
@@ -936,14 +987,14 @@ func (p *Node) parseFunction(xs SymbolsPtr) bool {
 	// parse the args
 	args := nodeFactory[tokArgs]()
 	for (*xs)[0].GetType() != symParClose {
-		if !args.parseArg(xs) {
-			return false
+		if err = args.parseArg(xs); err != nil {
+			return fmt.Errorf("trying to parse arguments -> %s", err.Error())
 		}
 		if (*xs)[0].GetType() == symParClose {
 			break
 		}
 		if (*xs)[0].GetType() != symComma {
-			return false // expected comma or end parenthesis
+			return fmt.Errorf("expected comma or end parenthesis") // expected comma or end parenthesis
 		}
 		forward(xs, 1)
 	}
@@ -951,16 +1002,24 @@ func (p *Node) parseFunction(xs SymbolsPtr) bool {
 	funcNode.append(args)
 
 	// then parse block
-	if !funcNode.parseBlock(xs) {
-		return false
+	if err = funcNode.parseBlock(xs); err != nil {
+		return fmt.Errorf("trying to parse function content -> %s", err.Error())
 	}
 	p.append(funcNode)
-	return true
+	return nil
 }
 
 // object ::= <import> | <basically> | <function>
-func (p *Node) parseObject(xs SymbolsPtr) bool {
-	return p.parseImport(xs) || p.parseBasically(xs) || p.parseFunction(xs)
+func (p *Node) parseObject(xs SymbolsPtr) error {
+	var a, b, c error
+	if a = p.parseImport(xs); a == nil {
+		return nil
+	} else if b = p.parseBasically(xs); b == nil {
+		return nil
+	} else if c = p.parseFunction(xs); c == nil {
+		return nil
+	}
+	return fmt.Errorf("could not parse object -> not import (%s), nor basically (%s), nor function (%s): ", a.Error(), b.Error(), c.Error())
 }
 
 // General exported functions
@@ -982,8 +1041,12 @@ func Parse(symbols []Symbol) (*Node, error) {
 	node.makeMeta()
 
 	for len(symbols) > 0 {
-		if !node.parseObject(&symbols) {
-			return nil, errors.New("could not parse the file")
+		if err := node.parseObject(&symbols); err != nil {
+			DisplaySymbols(symbols)
+			return nil, fmt.Errorf("could not parse the file -> %s\nNode profile:\n%s", err.Error(), node.String())
+		}
+		for len(symbols) > 0 && symbols[0].GetType() == symSemicolon {
+			forward(&symbols, 1)
 		}
 	}
 	// println(node.String())

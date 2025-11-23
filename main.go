@@ -78,17 +78,27 @@ func main() {
 	// 	print(fact(5) == 120, fact(5));
 	// }
 	// `)
+	// err := zzz.Run(`
+	// import print in io;
+
+	// basically matching(string) -> string;
+	// func matching("hello") return "what";
+	// func matching("hello":rest) return rest;
+	// func matching('h':rest) return matching(rest);
+	// func matching("") return "none";
+	// func matching(_) return "unknown";
+
+	// func main() {
+	// 	print(matching("hello world"));
+	// 	print(matching("hello"));
+	// 	print(matching("hhello"));
+	// 	print(matching("hhh"));
+	// }
+
+	// `)
 	err := zzz.Run(`
-	import print in io;
-
-	basically fact(int) -> int;
-	func fact(<1) return 1;
-	func fact(n) return n * fact(n - 1);
-
-	basically add(int, int) -> int;
-	func add(a, b) return a + b;
-
-	func main() print(fact(5), add(0,2));`)
+		import print in io; basically foo(int) -> int; func foo(n) { return 42; } func main() print(foo(3));
+	`)
 	if err != nil {
 		log.Fatal(err)
 	}

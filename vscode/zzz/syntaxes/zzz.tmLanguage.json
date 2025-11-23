@@ -88,7 +88,7 @@
       "patterns": [
         {
           "name": "entity.name.function.builtin.zzz",
-          "match": "\\b(map|print|userInput|reduce|filter)\\b"
+          "match": "\\b(map|print|userInput|reduce|filter|even|odd)\\b"
         }
       ]
     },

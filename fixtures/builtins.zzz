@@ -4,7 +4,11 @@ import map, filter, reduce in array;
 import even in compare;
 import print in io;
 
-func main() print(reduce(filter(map(t, +1), even), *)) where t = {1, 2, 3};
+func main() print(reduce(filter(map(t, +1), even), *)) where t = [1, 2, 3];
+
+/// in js
+
+console.log([1, 2, 3].map(x => x + 1).filter(x => x % 2 == 0).reduce((a, b) => a * b))
 
 /// output
 
@@ -23,15 +27,19 @@ procedure <file>
         defined <print>
     function <main>
         args
-        call <print>
-            call <reduce>
-                call <filter>
-                    call <map>
-                        defined <t>
-                        operation <plus>
-                            int <1>
-                    defined <even>
-                operation <mul>
+        context
+            call <print>
+                call <reduce>
+                    call <filter>
+                        call <map>
+                            defined <t>
+                            operation <plus>
+                                int <1>
+                        defined <even>
+                    operation <mul>
             set
                 defined <t>
-                list <
+                list <int>
+                    int <1>
+                    int <2>
+                    int <3>

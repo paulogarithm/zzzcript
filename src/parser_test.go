@@ -10,16 +10,16 @@ func TestParseGoodImport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !n.parseImport(&xs) {
-		t.Fatal("expected to work")
+	if err := n.parseImport(&xs); err != nil {
+		t.Fatal("expected to work: ", err)
 	}
 
 	xs, err = Lex("import hello, world in test;")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !n.parseImport(&xs) {
-		t.Fatal("expected to work")
+	if err := n.parseImport(&xs); err != nil {
+		t.Fatal("expected to work: ", err)
 	}
 }
 
@@ -29,15 +29,15 @@ func TestParseBadImport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if n.parseImport(&xs) {
-		t.Fatal("not expected to work")
+	if err := n.parseImport(&xs); err == nil {
+		t.Fatal("not expected to work: ", err)
 	}
 
 	xs, err = Lex("import func in world;") // keyword
 	if err != nil {
 		t.Fatal(err)
 	}
-	if n.parseImport(&xs) {
+	if err := n.parseImport(&xs); err == nil {
 		t.Fatal("not expected to work")
 	}
 
@@ -45,7 +45,7 @@ func TestParseBadImport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if n.parseImport(&xs) {
+	if err := n.parseImport(&xs); err == nil {
 		t.Fatal("not expected to work")
 	}
 
@@ -53,7 +53,7 @@ func TestParseBadImport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if n.parseImport(&xs) {
+	if err := n.parseImport(&xs); err == nil {
 		t.Fatal("not expected to work")
 	}
 
@@ -61,7 +61,7 @@ func TestParseBadImport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if n.parseImport(&xs) {
+	if err := n.parseImport(&xs); err == nil {
 		t.Fatal("not expected to work")
 	}
 }
@@ -74,8 +74,8 @@ func TestParseGoodBasicallyFunction(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !n.parseBasically(&xs) {
-		t.Fatal("expected to work")
+	if err := n.parseBasically(&xs); err != nil {
+		t.Fatal("expected to work: ", err)
 	}
 
 	n.makeMeta()
@@ -83,8 +83,8 @@ func TestParseGoodBasicallyFunction(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !n.parseBasically(&xs) {
-		t.Fatal("expected to work")
+	if err := n.parseBasically(&xs); err != nil {
+		t.Fatal("expected to work: ", err)
 	}
 
 	n.makeMeta()
@@ -92,8 +92,8 @@ func TestParseGoodBasicallyFunction(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !n.parseBasically(&xs) {
-		t.Fatal("expected to work")
+	if err := n.parseBasically(&xs); err != nil {
+		t.Fatal("expected to work: ", err)
 	}
 
 	n.makeMeta()
@@ -101,8 +101,8 @@ func TestParseGoodBasicallyFunction(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !n.parseBasically(&xs) {
-		t.Fatal("expected to work")
+	if err := n.parseBasically(&xs); err != nil {
+		t.Fatal("expected to work: ", err)
 	}
 
 	n.makeMeta()
@@ -110,8 +110,8 @@ func TestParseGoodBasicallyFunction(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !n.parseBasically(&xs) {
-		t.Fatal("expected to work")
+	if err := n.parseBasically(&xs); err != nil {
+		t.Fatal("expected to work: ", err)
 	}
 
 	n.makeMeta()
@@ -119,8 +119,8 @@ func TestParseGoodBasicallyFunction(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !n.parseBasically(&xs) {
-		t.Fatal("expected to work")
+	if err := n.parseBasically(&xs); err != nil {
+		t.Fatal("expected to work: ", err)
 	}
 
 	n.makeMeta()
@@ -128,8 +128,8 @@ func TestParseGoodBasicallyFunction(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !n.parseBasically(&xs) {
-		t.Fatal("expected to work")
+	if err := n.parseBasically(&xs); err != nil {
+		t.Fatal("expected to work: ", err)
 	}
 }
 
@@ -145,8 +145,8 @@ func TestParseValue(t *testing.T) {
 	if xs[0].GetType() != symInt {
 		t.Fatal("expected int, got " + xs[0].String())
 	}
-	if !n.parseValue(&xs) {
-		t.Fatal("expected to work")
+	if err := n.parseValue(&xs); err != nil {
+		t.Fatal("expected to work: ", err)
 	}
 
 	n.makeMeta()
@@ -157,8 +157,8 @@ func TestParseValue(t *testing.T) {
 	if xs[0].GetType() != symString {
 		t.Fatal("expected sring, got " + xs[0].String())
 	}
-	if !n.parseValue(&xs) {
-		t.Fatal("expected to work")
+	if err := n.parseValue(&xs); err != nil {
+		t.Fatal("expected to work: ", err)
 	}
 
 	n.makeMeta()
@@ -169,8 +169,8 @@ func TestParseValue(t *testing.T) {
 	if xs[0].GetType() != symKWTrue {
 		t.Fatal("expected bool, got " + xs[0].String())
 	}
-	if !n.parseValue(&xs) {
-		t.Fatal("expected to work")
+	if err := n.parseValue(&xs); err != nil {
+		t.Fatal("expected to work: ", err)
 	}
 
 	n.makeMeta()
@@ -181,8 +181,8 @@ func TestParseValue(t *testing.T) {
 	if xs[0].GetType() != symDef {
 		t.Fatal("expected def, got " + xs[0].String())
 	}
-	if !n.parseValue(&xs) {
-		t.Fatal("expected to work")
+	if err := n.parseValue(&xs); err != nil {
+		t.Fatal("expected to work: ", err)
 	}
 
 	// BAD
@@ -191,7 +191,7 @@ func TestParseValue(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if n.parseValue(&xs) {
+	if err := n.parseValue(&xs); err == nil {
 		t.Fatal("not expected to work")
 	}
 }
@@ -203,8 +203,8 @@ func TestParseUnary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !n.parseExpr(&xs) {
-		t.Fatal("expected to work")
+	if err := n.parseExpr(&xs); err != nil {
+		t.Fatal("expected to work: ", err)
 	}
 }
 
@@ -215,8 +215,8 @@ func TestParsePairFromLeaf(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !n.parseExpr(&xs) {
-		t.Fatal("expected to work")
+	if err := n.parseExpr(&xs); err != nil {
+		t.Fatal("expected to work: ", err)
 	}
 
 	n = nodeFactory[tokProcedure]("prout")
@@ -225,8 +225,8 @@ func TestParsePairFromLeaf(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !n.parseExpr(&xs) {
-		t.Fatal("expected to work")
+	if err := n.parseExpr(&xs); err != nil {
+		t.Fatal("expected to work: ", err)
 	}
 
 	n = nodeFactory[tokProcedure]("prout")
@@ -235,8 +235,8 @@ func TestParsePairFromLeaf(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !n.parseExpr(&xs) {
-		t.Fatal("expected to work")
+	if err := n.parseExpr(&xs); err != nil {
+		t.Fatal("expected to work: ", err)
 	}
 }
 
@@ -248,8 +248,8 @@ func TestParseFunc(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !n.parseFunction(&xs) {
-		t.Fatal("expected to work")
+	if err := n.parseFunction(&xs); err != nil {
+		t.Fatal("expected to work: ", err)
 	}
 }
 
@@ -262,8 +262,8 @@ func TestParseCall(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !n.parseExpr(&xs) {
-		t.Fatal("expected to work")
+	if err := n.parseExpr(&xs); err != nil {
+		t.Fatal("expected to work: ", err)
 	}
 
 	// some arguments
@@ -271,8 +271,8 @@ func TestParseCall(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !n.parseExpr(&xs) {
-		t.Fatal("expected to work")
+	if err := n.parseExpr(&xs); err != nil {
+		t.Fatal("expected to work: ", err)
 	}
 
 	// call in call
@@ -280,8 +280,8 @@ func TestParseCall(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !n.parseExpr(&xs) {
-		t.Fatal("expected to work")
+	if err := n.parseExpr(&xs); err != nil {
+		t.Fatal("expected to work: ", err)
 	}
 }
 
@@ -294,8 +294,8 @@ func TestParseReturn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !n.parseReturn(&xs) {
-		t.Fatal("expected to work")
+	if err := n.parseReturn(&xs); err != nil {
+		t.Fatal("expected to work: ", err)
 	}
 
 	// return expression
@@ -303,8 +303,8 @@ func TestParseReturn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !n.parseReturn(&xs) {
-		t.Fatal("expected to work")
+	if err := n.parseReturn(&xs); err != nil {
+		t.Fatal("expected to work: ", err)
 	}
 
 	// return expression 2
@@ -312,8 +312,8 @@ func TestParseReturn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !n.parseReturn(&xs) {
-		t.Fatal("expected to work")
+	if err := n.parseReturn(&xs); err != nil {
+		t.Fatal("expected to work: ", err)
 	}
 }
 
