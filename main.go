@@ -96,9 +96,38 @@ func main() {
 	// }
 
 	// `)
+	// err := zzz.Run(`
+	// 	import print in io;
+
+	// 	basically fib(int) -> int;
+	// 	func fib(0) return 0;
+	// 	func fib(1) return 1;
+	// 	func fib(n) return fib(n - 1) + fib(n - 2);
+
+	// 	func main() print(fib(25));
+	// `)
+	// err := zzz.Run(`
+	// 	import print in io;
+
+	// 	basically adder(int) -> int;
+	// 	func adder(0) return 0;
+	// 	func adder(n) return adder(n-1) + n;
+
+	// 	func main() print(adder(3.14));
+	// `)
 	err := zzz.Run(`
-		import print in io; basically foo(int) -> int; func foo(n) { return 42; } func main() print(foo(3));
+		import print in io;
+
+		basically show(number) -> null;
+		func show(n) print(n * .1);
+
+		func main() show(3);
 	`)
+	// err := zzz.Run(`
+	// 	import print in io;
+
+	// 	func main() print(3.14);
+	// `)
 	if err != nil {
 		log.Fatal(err)
 	}

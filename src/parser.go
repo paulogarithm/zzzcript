@@ -875,9 +875,11 @@ func (p *Node) parseExpr(xs SymbolsPtr) error {
 	errs := [3]error{nil}
 	errs[0] = p.parseUnary(xs)
 	if errs[0] != nil {
+		println("not unary")
 		errs[1] = p.parsePair(xs)
 	}
 	if errs[1] != nil {
+		println("not term")
 		errs[2] = p.parseTerm(xs)
 	}
 	if errs[2] != nil {

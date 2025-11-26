@@ -302,12 +302,19 @@ func DisplaySymbols(xs []Symbol) {
 	fmt.Println()
 }
 
-func getSymbolToAppend(isNum, isFlt, isStr bool, buf string) (Symbol, error) {
+func getSymbolToAppend(isNum, isFlt, isStr bool, buf string, symbols *[]Symbol) (Symbol, error) {
 	var t Symbol
 
 	switch {
 	case isNum && isFlt:
-		n, err := strconv.ParseFloat(buf, 64)
+		firstPart := (*symbols)[len(*symbols)-1]
+		*symbols = (*symbols)[:len(*symbols)-1]
+		firstNum := 0
+		if num, ok := firstPart.(intSymbol); ok {
+			firstNum = int(num.Content)
+		}
+		println("buf: ", buf)
+		n, err := strconv.ParseFloat(strconv.Itoa(firstNum) + "." + buf, 64)
 		if err != nil {
 			return t, err
 		}
@@ -329,6 +336,21 @@ func getSymbolToAppend(isNum, isFlt, isStr bool, buf string) (Symbol, error) {
 		}
 	}
 	return t, nil
+}
+
+func treatOperator(inStr bool, c rune, buf *string, lenRune int, i *int, toPush *Symbol, runes []rune) {
+	if inStr {
+		(*buf) += string(c)
+	} else if strings.ContainsRune(dualityChars, c) && *i < lenRune-1 {
+		if sym, ok := dualchar2sym[string(c)+string(runes[*i+1])]; ok {
+			*toPush = simpleSymbol{sym}
+			(*i)++
+		} else {
+			*toPush = simpleSymbol{char2sym[c]}
+		}
+	} else {
+		*toPush = simpleSymbol{char2sym[c]}
+	}
 }
 
 func Lex(stream string) ([]Symbol, error) {
@@ -354,19 +376,18 @@ func Lex(stream string) ([]Symbol, error) {
 			inStr = !inStr
 			isStr = !inStr
 			isSep = inStr
-		case '(', ')', '{', '}', '+', '-', '/', '*', '=', '<', '>', ';', '&', '|', '^', '~', ',', '!', '.', '[', ']', ':':
-			if inStr {
-				buf += string(c)
-			} else if strings.ContainsRune(dualityChars, c) && i < lenRune-1 {
-				if sym, ok := dualchar2sym[string(c)+string(runes[i+1])]; ok {
-					toPush = simpleSymbol{sym}
-					i++
-				} else {
-					toPush = simpleSymbol{char2sym[c]}
-				}
-			} else {
-				toPush = simpleSymbol{char2sym[c]}
+		case '.':
+			t, err := getSymbolToAppend(isNum, isFlt, isStr, buf, &list)
+			if err != nil {
+				return list, err
 			}
+			list = append(list, t)
+			buf = ""
+			isStr = false
+			isFlt = true
+			isNum = true
+		case '(', ')', '{', '}', '+', '-', '/', '*', '=', '<', '>', ';', '&', '|', '^', '~', ',', '!', '[', ']', ':':
+			treatOperator(inStr, c, &buf, lenRune, &i, &toPush, runes)
 		case ' ', '\t', '\n':
 			if inStr {
 				buf += string(c)
@@ -389,16 +410,12 @@ func Lex(stream string) ([]Symbol, error) {
 			case unicode.IsNumber(c):
 				isNum = true
 				buf += string(c)
-			case c == '.' && !isFlt:
-				isFlt = true
-				isNum = true
-				buf += string(c)
 			default:
 				return list, fmt.Errorf("invalid character: %c", c)
 			}
 		}
 		if isSep && len(buf) != 0 {
-			t, err := getSymbolToAppend(isNum, isFlt, isStr, buf)
+			t, err := getSymbolToAppend(isNum, isFlt, isStr, buf, &list)
 			if err != nil {
 				return list, err
 			}
@@ -413,7 +430,7 @@ func Lex(stream string) ([]Symbol, error) {
 		}
 	}
 	if len(buf) != 0 {
-		t, err := getSymbolToAppend(isNum, isFlt, isStr, buf)
+		t, err := getSymbolToAppend(isNum, isFlt, isStr, buf, &list)
 		if err != nil {
 			return list, err
 		}

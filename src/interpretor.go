@@ -6,7 +6,7 @@ import (
 
 // usefull
 
-type argument interface{}
+type argument any
 
 func getTypeOfArgument(arg argument) zzzType {
 	switch arg.(type) {
@@ -183,6 +183,44 @@ func callBuiltin(name string, meta functionMeta, args []argument) (argument, err
 	return f(args), nil
 }
 
+// map[from]map[to]func
+var lazyCast = map[zzzType]map[zzzType]func(argument) argument{
+	typInt: {
+		typNumber: func(x argument) argument {
+			println("here !")
+			return zzzNumber(x.(zzzInt))
+		},
+		typBoolean: func(x argument) argument {
+			if x.(zzzInt) == 0 {
+				return true
+			} else {
+				return false
+			}
+		},
+	},
+	typNumber: {
+		typInt: func(x argument) argument {
+			return zzzInt(x.(zzzNumber))
+		},
+		typBoolean: func(x argument) argument {
+			if x.(zzzNumber) == 0.0 {
+				return true
+			} else {
+				return false
+			}
+		},
+	},
+	typBoolean: {
+		typInt: func(x argument) argument {
+			if x.(bool) {
+				return zzzInt(1)
+			} else {
+				return zzzInt(0)
+			}
+		},
+	},
+}
+
 var doPairOperation = map[zzzType]map[operatorType]func(x, y argument) argument{
 	typInt: {
 		opeAnd:    func(x, y argument) argument { return x.(zzzInt) != 0 && y.(zzzInt) != 0 },
@@ -288,6 +326,7 @@ var doUnaryTest = map[zzzType]map[testType]func(x argument) argument{
 
 func calculusPair(tok Token, x, y argument) (argument, error) {
 	argType := getTypeOfArgument(x)
+	otherArgType := getTypeOfArgument(y)
 	if tok.GetTokenType() == tokOperator {
 		typ, ok := doPairOperation[argType]
 		if !ok {
@@ -296,6 +335,10 @@ func calculusPair(tok Token, x, y argument) (argument, error) {
 		f, ok := typ[tok.(*opeToken).Operator]
 		if !ok {
 			return nil, fmt.Errorf("could not do pair operation %s with %s", tok.String(), convType2Str[argType])
+		}
+		if otherArgType != argType {
+			println("here")
+			y = lazyCast[otherArgType][argType](y)
 		}
 		return f(x, y), nil
 
@@ -307,6 +350,9 @@ func calculusPair(tok Token, x, y argument) (argument, error) {
 		f, ok := typ[tok.(*testToken).Test]
 		if !ok {
 			return nil, fmt.Errorf("could not do pair test %s with %s", tok.String(), convType2Str[argType])
+		}
+		if otherArgType != argType {
+			y = lazyCast[otherArgType][argType](y)
 		}
 		return f(x, y), nil
 	}
@@ -378,6 +424,21 @@ func executeExpr(ast, f *Node, defmap *map[string]argument) (argument, error) {
 		toCall := findFunction(ast, fData.Data, arglist)
 		if toCall == nil {
 			return nil, fmt.Errorf("could not call '%s': invalid arguments, not guarded", fData.Data)
+		}
+		for n, arg := range arglist {
+			realArgType := getTypeOfArgument(arg)
+			if realArgType == fMeta.In[n] {
+				continue
+			}
+			fromTable, ok := lazyCast[realArgType]
+			if !ok {
+				return nil, fmt.Errorf("could not call '%s': invalid arguments, invalid cast", fData.Data)
+			}
+			convertType, ok := fromTable[fMeta.In[n]]
+			if !ok {
+				return nil, fmt.Errorf("could not call '%s': invalid arguments, invalid cast", fData.Data)
+			}
+			arglist[n] = convertType(arg)
 		}
 		return callFunction(ast, toCall, arglist)
 
